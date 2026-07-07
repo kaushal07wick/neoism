@@ -1,0 +1,123 @@
+{
+  "id": "reusable-art-16th-century",
+  "name": "Reusable Art 16th Century Illuminated Letters",
+  "kind": "image-alphabet",
+  "license": "Public domain according to ReusableArt.com page text; source pages retained per letter.",
+  "source": "https://www.reusableart.com/alphabets_letters/full-alphabets/illuminated-letters",
+  "supportsInline": false,
+  "supportsDropcap": true,
+  "items": [
+    {
+      "letter": "A",
+      "file": "A.jpeg",
+      "sourcePage": "https://www.reusableart.com/illuminated-letter-a.html",
+      "sourceImage": "https://www.reusableart.com/wp-content/uploads/2015/09/letter-A.jpeg",
+      "bytes": 72536
+    },
+    {
+      "letter": "D",
+      "file": "D.jpg",
+      "sourcePage": "https://www.reusableart.com/illuminated-letter-d.html",
+      "sourceImage": "https://www.reusableart.com/wp-content/uploads/2015/10/letter-d-6.jpg",
+      "bytes": 185380
+    },
+    {
+      "letter": "E",
+      "file": "E.jpg",
+      "sourcePage": "https://www.reusableart.com/illuminated-letter-e.html",
+      "sourceImage": "https://www.reusableart.com/wp-content/uploads/2015/10/letter-e-5.jpg",
+      "bytes": 176755
+    },
+    {
+      "letter": "G",
+      "file": "G.jpg",
+      "sourcePage": "https://www.reusableart.com/illuminated-letter-g.html",
+      "sourceImage": "https://www.reusableart.com/wp-content/uploads/2015/09/letter-g-small-2.jpg",
+      "bytes": 29030
+    },
+    {
+      "letter": "H",
+      "file": "H.jpg",
+      "sourcePage": "https://www.reusableart.com/illuminated-letter-h.html",
+      "sourceImage": "https://www.reusableart.com/wp-content/uploads/2015/09/letter-h.jpg",
+      "bytes": 191042
+    },
+    {
+      "letter": "I",
+      "file": "I.jpg",
+      "sourcePage": "https://www.reusableart.com/illuminated-letter-i.html",
+      "sourceImage": "https://www.reusableart.com/wp-content/uploads/2015/09/letter-i-small-4.jpg",
+      "bytes": 26294
+    },
+    {
+      "letter": "L",
+      "file": "L.jpg",
+      "sourcePage": "https://www.reusableart.com/gilded-illuminated-letter-l.html",
+      "sourceImage": "https://www.reusableart.com/wp-content/uploads/2015/09/letter-l-2.jpg",
+      "bytes": 215664
+    },
+    {
+      "letter": "M",
+      "file": "M.jpg",
+      "sourcePage": "https://www.reusableart.com/illuminated-letter-m.html",
+      "sourceImage": "https://www.reusableart.com/wp-content/uploads/2015/09/letter-m-3.jpg",
+      "bytes": 209135
+    },
+    {
+      "letter": "N",
+      "file": "N.jpg",
+      "sourcePage": "https://www.reusableart.com/illuminated-letter-n.html",
+      "sourceImage": "https://www.reusableart.com/wp-content/uploads/2015/09/letter-n-small-3.jpg",
+      "bytes": 32393
+    },
+    {
+      "letter": "O",
+      "file": "O.jpg",
+      "sourcePage": "https://www.reusableart.com/illuminated-letter-o.html",
+      "sourceImage": "https://www.reusableart.com/wp-content/uploads/2015/09/letter-o-1.jpg",
+      "bytes": 221862
+    },
+    {
+      "letter": "P",
+      "file": "P.jpg",
+      "sourcePage": "https://www.reusableart.com/illuminated-letter-p.html",
+      "sourceImage": "https://www.reusableart.com/wp-content/uploads/2015/09/letter-p-2.jpg",
+      "bytes": 161575
+    },
+    {
+      "letter": "Q",
+      "file": "Q.jpeg",
+      "sourcePage": "https://www.reusableart.com/illuminated-letter-q.html",
+      "sourceImage": "https://www.reusableart.com/wp-content/uploads/2015/09/letter-Q.jpeg",
+      "bytes": 65174
+    },
+    {
+      "letter": "R",
+      "file": "R.jpg",
+      "sourcePage": "https://www.reusableart.com/illuminated-letter-r.html",
+      "sourceImage": "https://www.reusableart.com/wp-content/uploads/2015/09/letter-r-1.jpg",
+      "bytes": 176988
+    },
+    {
+      "letter": "S",
+      "file": "S.jpg",
+      "sourcePage": "https://www.reusableart.com/illuminated-letter-s.html",
+      "sourceImage": "https://www.reusableart.com/wp-content/uploads/2015/09/letter-s-2.jpg",
+      "bytes": 122677
+    },
+    {
+      "letter": "T",
+      "file": "T.jpg",
+      "sourcePage": "https://www.reusableart.com/small-letter-t.html",
+      "sourceImage": "https://www.reusableart.com/wp-content/uploads/2015/09/letter-t-small.jpg",
+      "bytes": 26767
+    },
+    {
+      "letter": "V",
+      "file": "V.jpg",
+      "sourcePage": "https://www.reusableart.com/illuminated-letter-v.html",
+      "sourceImage": "https://www.reusableart.com/wp-content/uploads/2015/09/letter-v-small-7.jpg",
+      "bytes": 31307
+    }
+  ]
+}

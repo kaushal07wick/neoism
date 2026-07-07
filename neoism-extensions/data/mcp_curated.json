@@ -1,0 +1,282 @@
+[
+  {
+    "id": "filesystem",
+    "npm_package": "@modelcontextprotocol/server-filesystem",
+    "bin_name": "mcp-server-filesystem",
+    "command_args": ["{cwd}"],
+    "categories": ["Filesystem", "Official"],
+    "env_keys": []
+  },
+  {
+    "id": "github",
+    "npm_package": "@modelcontextprotocol/server-github",
+    "bin_name": "mcp-server-github",
+    "command_args": [],
+    "categories": ["Source Control", "Official"],
+    "env_keys": ["GITHUB_PERSONAL_ACCESS_TOKEN"]
+  },
+  {
+    "id": "gitlab",
+    "npm_package": "@modelcontextprotocol/server-gitlab",
+    "bin_name": "mcp-server-gitlab",
+    "command_args": [],
+    "categories": ["Source Control", "Official"],
+    "env_keys": ["GITLAB_PERSONAL_ACCESS_TOKEN", "GITLAB_API_URL"]
+  },
+  {
+    "id": "google-maps",
+    "npm_package": "@modelcontextprotocol/server-google-maps",
+    "bin_name": "mcp-server-google-maps",
+    "command_args": [],
+    "categories": ["Search", "Official"],
+    "env_keys": ["GOOGLE_MAPS_API_KEY"]
+  },
+  {
+    "id": "gdrive",
+    "npm_package": "@modelcontextprotocol/server-gdrive",
+    "bin_name": "mcp-server-gdrive",
+    "command_args": [],
+    "categories": ["Storage", "Official"],
+    "env_keys": ["GDRIVE_CREDENTIALS_PATH"]
+  },
+  {
+    "id": "postgres",
+    "npm_package": "@modelcontextprotocol/server-postgres",
+    "bin_name": "mcp-server-postgres",
+    "command_args": ["{postgres_url}"],
+    "categories": ["Database", "Official"],
+    "env_keys": []
+  },
+  {
+    "id": "brave-search",
+    "npm_package": "@modelcontextprotocol/server-brave-search",
+    "bin_name": "mcp-server-brave-search",
+    "command_args": [],
+    "categories": ["Search", "Official"],
+    "env_keys": ["BRAVE_API_KEY"]
+  },
+  {
+    "id": "puppeteer",
+    "npm_package": "@modelcontextprotocol/server-puppeteer",
+    "bin_name": "mcp-server-puppeteer",
+    "command_args": [],
+    "categories": ["Browser", "Official"],
+    "env_keys": []
+  },
+  {
+    "id": "slack",
+    "npm_package": "@modelcontextprotocol/server-slack",
+    "bin_name": "mcp-server-slack",
+    "command_args": [],
+    "categories": ["Communication", "Official"],
+    "env_keys": ["SLACK_BOT_TOKEN", "SLACK_TEAM_ID"]
+  },
+  {
+    "id": "memory",
+    "npm_package": "@modelcontextprotocol/server-memory",
+    "bin_name": "mcp-server-memory",
+    "command_args": [],
+    "categories": ["Memory", "Official"],
+    "env_keys": []
+  },
+  {
+    "id": "everart",
+    "npm_package": "@modelcontextprotocol/server-everart",
+    "bin_name": "mcp-server-everart",
+    "command_args": [],
+    "categories": ["Images", "Official"],
+    "env_keys": ["EVERART_API_KEY"]
+  },
+  {
+    "id": "aws-kb-retrieval",
+    "npm_package": "@modelcontextprotocol/server-aws-kb-retrieval",
+    "bin_name": "mcp-server-aws-kb-retrieval",
+    "command_args": [],
+    "categories": ["Cloud", "Official"],
+    "env_keys": ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"]
+  },
+  {
+    "id": "sequential-thinking",
+    "npm_package": "@modelcontextprotocol/server-sequential-thinking",
+    "bin_name": "mcp-server-sequential-thinking",
+    "command_args": [],
+    "categories": ["Reasoning", "Official"],
+    "env_keys": []
+  },
+  {
+    "id": "everything",
+    "npm_package": "@modelcontextprotocol/server-everything",
+    "bin_name": "mcp-server-everything",
+    "command_args": [],
+    "categories": ["Reference", "Official"],
+    "env_keys": []
+  },
+  {
+    "id": "redis",
+    "npm_package": "@modelcontextprotocol/server-redis",
+    "bin_name": "mcp-server-redis",
+    "command_args": ["{redis_url}"],
+    "categories": ["Database", "Official"],
+    "env_keys": []
+  },
+  {
+    "id": "playwright",
+    "npm_package": "@playwright/mcp",
+    "bin_name": "playwright-mcp",
+    "command_args": [],
+    "categories": ["Browser", "Testing"],
+    "env_keys": []
+  },
+  {
+    "id": "cloudflare",
+    "npm_package": "@cloudflare/mcp-server-cloudflare",
+    "bin_name": "mcp-server-cloudflare",
+    "command_args": ["run"],
+    "categories": ["Cloud"],
+    "env_keys": ["CLOUDFLARE_API_TOKEN"]
+  },
+  {
+    "id": "firecrawl",
+    "npm_package": "firecrawl-mcp",
+    "bin_name": "firecrawl-mcp",
+    "command_args": [],
+    "categories": ["Web Scraping"],
+    "env_keys": ["FIRECRAWL_API_KEY"]
+  },
+  {
+    "id": "supabase",
+    "npm_package": "@supabase/mcp-server-supabase",
+    "bin_name": "mcp-server-supabase",
+    "command_args": [],
+    "categories": ["Database", "Cloud"],
+    "env_keys": ["SUPABASE_ACCESS_TOKEN"]
+  },
+  {
+    "id": "notion",
+    "npm_package": "@notionhq/notion-mcp-server",
+    "bin_name": "notion-mcp-server",
+    "command_args": [],
+    "categories": ["Productivity"],
+    "env_keys": ["NOTION_API_TOKEN"]
+  },
+  {
+    "id": "figma",
+    "npm_package": "figma-developer-mcp",
+    "bin_name": "figma-developer-mcp",
+    "command_args": ["--stdio"],
+    "categories": ["Design"],
+    "env_keys": ["FIGMA_API_KEY"]
+  },
+  {
+    "id": "context7",
+    "npm_package": "@upstash/context7-mcp",
+    "bin_name": "context7-mcp",
+    "command_args": [],
+    "categories": ["Documentation"],
+    "env_keys": []
+  },
+  {
+    "id": "magic",
+    "npm_package": "@21st-dev/magic",
+    "bin_name": "magic",
+    "command_args": [],
+    "categories": ["UI", "Frontend"],
+    "env_keys": ["TWENTY_FIRST_API_KEY"]
+  },
+  {
+    "id": "browsermcp",
+    "npm_package": "@browsermcp/mcp",
+    "bin_name": "mcp-server-browsermcp",
+    "command_args": [],
+    "categories": ["Browser"],
+    "env_keys": []
+  },
+  {
+    "id": "playwright-ea",
+    "npm_package": "@executeautomation/playwright-mcp-server",
+    "bin_name": "playwright-mcp-server",
+    "command_args": [],
+    "categories": ["Browser", "Testing"],
+    "env_keys": []
+  },
+  {
+    "id": "exa",
+    "npm_package": "exa-mcp-server",
+    "bin_name": "exa-mcp-server",
+    "command_args": [],
+    "categories": ["Search"],
+    "env_keys": ["EXA_API_KEY"]
+  },
+  {
+    "id": "tavily",
+    "npm_package": "tavily-mcp",
+    "bin_name": "tavily-mcp",
+    "command_args": [],
+    "categories": ["Search"],
+    "env_keys": ["TAVILY_API_KEY"]
+  },
+  {
+    "id": "kubernetes",
+    "npm_package": "mcp-server-kubernetes",
+    "bin_name": "mcp-server-kubernetes",
+    "command_args": [],
+    "categories": ["Cloud", "DevOps"],
+    "env_keys": []
+  },
+  {
+    "id": "nodejs-debugger",
+    "npm_package": "@hyperdrive-eng/mcp-nodejs-debugger",
+    "bin_name": "mcp-nodejs-debugger",
+    "command_args": [],
+    "categories": ["Developer Tools"],
+    "env_keys": []
+  },
+  {
+    "id": "fetch",
+    "pip_package": "mcp-server-fetch",
+    "bin_name": "mcp-server-fetch",
+    "command_args": [],
+    "categories": ["Web", "Official"],
+    "env_keys": []
+  },
+  {
+    "id": "time",
+    "pip_package": "mcp-server-time",
+    "bin_name": "mcp-server-time",
+    "command_args": [],
+    "categories": ["Utilities", "Official"],
+    "env_keys": []
+  },
+  {
+    "id": "git",
+    "pip_package": "mcp-server-git",
+    "bin_name": "mcp-server-git",
+    "command_args": [],
+    "categories": ["Source Control", "Official"],
+    "env_keys": []
+  },
+  {
+    "id": "sqlite",
+    "pip_package": "mcp-server-sqlite",
+    "bin_name": "mcp-server-sqlite",
+    "command_args": ["--db-path", "{sqlite_path}"],
+    "categories": ["Database", "Official"],
+    "env_keys": []
+  },
+  {
+    "id": "sentry",
+    "pip_package": "mcp-server-sentry",
+    "bin_name": "mcp-server-sentry",
+    "command_args": [],
+    "categories": ["Observability", "Official"],
+    "env_keys": ["SENTRY_AUTH_TOKEN"]
+  },
+  {
+    "id": "blender",
+    "pip_package": "blender-mcp",
+    "bin_name": "blender-mcp",
+    "command_args": [],
+    "categories": ["3D", "Creative"],
+    "env_keys": []
+  }
+]

@@ -1,0 +1,913 @@
+[
+  {
+    "id": "aws-kb-retrieval",
+    "name": "Aws Kb Retrieval",
+    "version": "0.6.2",
+    "description": "MCP server for AWS Knowledge Base retrieval using Bedrock Agent Runtime",
+    "author": "Anthropic, PBC",
+    "downloads": 509,
+    "categories": [
+      "Cloud",
+      "Official"
+    ],
+    "repository_url": null,
+    "install": {
+      "kind": "npm",
+      "package": "@modelcontextprotocol/server-aws-kb-retrieval",
+      "version": "0.6.2"
+    },
+    "run": {
+      "command": [
+        "mcp-server-aws-kb-retrieval"
+      ],
+      "env": {}
+    },
+    "env_keys": [
+      "AWS_ACCESS_KEY_ID",
+      "AWS_SECRET_ACCESS_KEY",
+      "AWS_REGION"
+    ]
+  },
+  {
+    "id": "blender",
+    "name": "Blender",
+    "version": "1.5.6",
+    "description": "Blender integration through the Model Context Protocol",
+    "author": "",
+    "downloads": null,
+    "categories": [
+      "3D",
+      "Creative"
+    ],
+    "repository_url": "https://github.com/yourusername/blender-mcp",
+    "install": {
+      "kind": "pip",
+      "package": "blender-mcp",
+      "version": "1.5.6"
+    },
+    "run": {
+      "command": [
+        "blender-mcp"
+      ],
+      "env": {}
+    },
+    "env_keys": []
+  },
+  {
+    "id": "brave-search",
+    "name": "Brave Search",
+    "version": "0.6.2",
+    "description": "MCP server for Brave Search API integration",
+    "author": "Anthropic, PBC",
+    "downloads": 24162,
+    "categories": [
+      "Search",
+      "Official"
+    ],
+    "repository_url": null,
+    "install": {
+      "kind": "npm",
+      "package": "@modelcontextprotocol/server-brave-search",
+      "version": "0.6.2"
+    },
+    "run": {
+      "command": [
+        "mcp-server-brave-search"
+      ],
+      "env": {}
+    },
+    "env_keys": [
+      "BRAVE_API_KEY"
+    ]
+  },
+  {
+    "id": "browsermcp",
+    "name": "Browsermcp",
+    "version": "0.1.3",
+    "description": "MCP server for browser automation using Browser MCP",
+    "author": "Browser MCP",
+    "downloads": 7612,
+    "categories": [
+      "Browser"
+    ],
+    "repository_url": null,
+    "install": {
+      "kind": "npm",
+      "package": "@browsermcp/mcp",
+      "version": "0.1.3"
+    },
+    "run": {
+      "command": [
+        "mcp-server-browsermcp"
+      ],
+      "env": {}
+    },
+    "env_keys": []
+  },
+  {
+    "id": "cloudflare",
+    "name": "Cloudflare",
+    "version": "0.2.0",
+    "description": "MCP server for interacting with Cloudflare API",
+    "author": "Cloudflare, Inc.",
+    "downloads": 3309,
+    "categories": [
+      "Cloud"
+    ],
+    "repository_url": null,
+    "install": {
+      "kind": "npm",
+      "package": "@cloudflare/mcp-server-cloudflare",
+      "version": "0.2.0"
+    },
+    "run": {
+      "command": [
+        "mcp-server-cloudflare",
+        "run"
+      ],
+      "env": {}
+    },
+    "env_keys": [
+      "CLOUDFLARE_API_TOKEN"
+    ]
+  },
+  {
+    "id": "context7",
+    "name": "Context7",
+    "version": "3.0.0",
+    "description": "MCP server for Context7",
+    "author": "abdush",
+    "downloads": 1444138,
+    "categories": [
+      "Documentation"
+    ],
+    "repository_url": "git+https://github.com/upstash/context7.git",
+    "install": {
+      "kind": "npm",
+      "package": "@upstash/context7-mcp",
+      "version": "3.0.0"
+    },
+    "run": {
+      "command": [
+        "context7-mcp"
+      ],
+      "env": {}
+    },
+    "env_keys": []
+  },
+  {
+    "id": "everart",
+    "name": "Everart",
+    "version": "0.6.2",
+    "description": "MCP server for EverArt API integration",
+    "author": "Anthropic, PBC",
+    "downloads": 281,
+    "categories": [
+      "Images",
+      "Official"
+    ],
+    "repository_url": null,
+    "install": {
+      "kind": "npm",
+      "package": "@modelcontextprotocol/server-everart",
+      "version": "0.6.2"
+    },
+    "run": {
+      "command": [
+        "mcp-server-everart"
+      ],
+      "env": {}
+    },
+    "env_keys": [
+      "EVERART_API_KEY"
+    ]
+  },
+  {
+    "id": "everything",
+    "name": "Everything",
+    "version": "2026.1.26",
+    "description": "MCP server that exercises all the features of the MCP protocol",
+    "author": "Anthropic, PBC",
+    "downloads": 65747,
+    "categories": [
+      "Reference",
+      "Official"
+    ],
+    "repository_url": "git+https://github.com/modelcontextprotocol/servers.git",
+    "install": {
+      "kind": "npm",
+      "package": "@modelcontextprotocol/server-everything",
+      "version": "2026.1.26"
+    },
+    "run": {
+      "command": [
+        "mcp-server-everything"
+      ],
+      "env": {}
+    },
+    "env_keys": []
+  },
+  {
+    "id": "exa",
+    "name": "Exa",
+    "version": "3.2.1",
+    "description": "A Model Context Protocol server with Exa for web search and web crawling. Provides real-time web searches with configurable tool selection, allowing users to enable or disable specific search capabilities. Supports customizable result counts, live crawlin",
+    "author": "Exa Labs",
+    "downloads": 16757,
+    "categories": [
+      "Search"
+    ],
+    "repository_url": "git+https://github.com/exa-labs/exa-mcp-server.git",
+    "install": {
+      "kind": "npm",
+      "package": "exa-mcp-server",
+      "version": "3.2.1"
+    },
+    "run": {
+      "command": [
+        "exa-mcp-server"
+      ],
+      "env": {}
+    },
+    "env_keys": [
+      "EXA_API_KEY"
+    ]
+  },
+  {
+    "id": "fetch",
+    "name": "Fetch",
+    "version": "2025.4.7",
+    "description": "A Model Context Protocol server providing tools to fetch and convert web content for usage by LLMs",
+    "author": "Anthropic, PBC.",
+    "downloads": null,
+    "categories": [
+      "Web",
+      "Official"
+    ],
+    "repository_url": null,
+    "install": {
+      "kind": "pip",
+      "package": "mcp-server-fetch",
+      "version": "2025.4.7"
+    },
+    "run": {
+      "command": [
+        "mcp-server-fetch"
+      ],
+      "env": {}
+    },
+    "env_keys": []
+  },
+  {
+    "id": "figma",
+    "name": "Figma",
+    "version": "0.11.0",
+    "description": "Give your coding agent access to your Figma data. Implement designs in any framework in one-shot.",
+    "author": "",
+    "downloads": 49865,
+    "categories": [
+      "Design"
+    ],
+    "repository_url": "git+https://github.com/GLips/Figma-Context-MCP.git",
+    "install": {
+      "kind": "npm",
+      "package": "figma-developer-mcp",
+      "version": "0.11.0"
+    },
+    "run": {
+      "command": [
+        "figma-developer-mcp",
+        "--stdio"
+      ],
+      "env": {}
+    },
+    "env_keys": [
+      "FIGMA_API_KEY"
+    ]
+  },
+  {
+    "id": "filesystem",
+    "name": "Filesystem",
+    "version": "2026.1.14",
+    "description": "MCP server for filesystem access",
+    "author": "Anthropic, PBC",
+    "downloads": 261440,
+    "categories": [
+      "Filesystem",
+      "Official"
+    ],
+    "repository_url": "git+https://github.com/modelcontextprotocol/servers.git",
+    "install": {
+      "kind": "npm",
+      "package": "@modelcontextprotocol/server-filesystem",
+      "version": "2026.1.14"
+    },
+    "run": {
+      "command": [
+        "mcp-server-filesystem",
+        "{cwd}"
+      ],
+      "env": {}
+    },
+    "env_keys": []
+  },
+  {
+    "id": "firecrawl",
+    "name": "Firecrawl",
+    "version": "3.17.0",
+    "description": "MCP server for Firecrawl — search, scrape, and interact with the web. Supports both cloud and self-hosted instances. Features include web search, scraping, page interaction, batch processing, and LLM-powered content analysis.",
+    "author": "firecrawl",
+    "downloads": 59242,
+    "categories": [
+      "Web Scraping"
+    ],
+    "repository_url": "git+https://github.com/firecrawl/firecrawl-mcp-server.git",
+    "install": {
+      "kind": "npm",
+      "package": "firecrawl-mcp",
+      "version": "3.17.0"
+    },
+    "run": {
+      "command": [
+        "firecrawl-mcp"
+      ],
+      "env": {}
+    },
+    "env_keys": [
+      "FIRECRAWL_API_KEY"
+    ]
+  },
+  {
+    "id": "gdrive",
+    "name": "Gdrive",
+    "version": "2025.1.14",
+    "description": "MCP server for interacting with Google Drive",
+    "author": "Anthropic, PBC",
+    "downloads": 8801,
+    "categories": [
+      "Storage",
+      "Official"
+    ],
+    "repository_url": null,
+    "install": {
+      "kind": "npm",
+      "package": "@modelcontextprotocol/server-gdrive",
+      "version": "2025.1.14"
+    },
+    "run": {
+      "command": [
+        "mcp-server-gdrive"
+      ],
+      "env": {}
+    },
+    "env_keys": [
+      "GDRIVE_CREDENTIALS_PATH"
+    ]
+  },
+  {
+    "id": "git",
+    "name": "Git",
+    "version": "2026.1.14",
+    "description": "A Model Context Protocol server providing tools to read, search, and manipulate Git repositories programmatically via LLMs",
+    "author": "Anthropic, PBC.",
+    "downloads": null,
+    "categories": [
+      "Source Control",
+      "Official"
+    ],
+    "repository_url": null,
+    "install": {
+      "kind": "pip",
+      "package": "mcp-server-git",
+      "version": "2026.1.14"
+    },
+    "run": {
+      "command": [
+        "mcp-server-git"
+      ],
+      "env": {}
+    },
+    "env_keys": []
+  },
+  {
+    "id": "github",
+    "name": "Github",
+    "version": "2025.4.8",
+    "description": "MCP server for using the GitHub API",
+    "author": "Anthropic, PBC",
+    "downloads": 125774,
+    "categories": [
+      "Source Control",
+      "Official"
+    ],
+    "repository_url": null,
+    "install": {
+      "kind": "npm",
+      "package": "@modelcontextprotocol/server-github",
+      "version": "2025.4.8"
+    },
+    "run": {
+      "command": [
+        "mcp-server-github"
+      ],
+      "env": {}
+    },
+    "env_keys": [
+      "GITHUB_PERSONAL_ACCESS_TOKEN"
+    ]
+  },
+  {
+    "id": "gitlab",
+    "name": "Gitlab",
+    "version": "2025.4.25",
+    "description": "MCP server for using the GitLab API",
+    "author": "GitLab, PBC",
+    "downloads": 6407,
+    "categories": [
+      "Source Control",
+      "Official"
+    ],
+    "repository_url": null,
+    "install": {
+      "kind": "npm",
+      "package": "@modelcontextprotocol/server-gitlab",
+      "version": "2025.4.25"
+    },
+    "run": {
+      "command": [
+        "mcp-server-gitlab"
+      ],
+      "env": {}
+    },
+    "env_keys": [
+      "GITLAB_PERSONAL_ACCESS_TOKEN",
+      "GITLAB_API_URL"
+    ]
+  },
+  {
+    "id": "google-maps",
+    "name": "Google Maps",
+    "version": "0.6.2",
+    "description": "MCP server for using the Google Maps API",
+    "author": "Anthropic, PBC",
+    "downloads": 9288,
+    "categories": [
+      "Search",
+      "Official"
+    ],
+    "repository_url": null,
+    "install": {
+      "kind": "npm",
+      "package": "@modelcontextprotocol/server-google-maps",
+      "version": "0.6.2"
+    },
+    "run": {
+      "command": [
+        "mcp-server-google-maps"
+      ],
+      "env": {}
+    },
+    "env_keys": [
+      "GOOGLE_MAPS_API_KEY"
+    ]
+  },
+  {
+    "id": "kubernetes",
+    "name": "Kubernetes",
+    "version": "3.8.0",
+    "description": "MCP server for interacting with Kubernetes clusters via kubectl",
+    "author": "Flux159",
+    "downloads": 28597,
+    "categories": [
+      "Cloud",
+      "DevOps"
+    ],
+    "repository_url": "git+https://github.com/Flux159/mcp-server-kubernetes.git",
+    "install": {
+      "kind": "npm",
+      "package": "mcp-server-kubernetes",
+      "version": "3.8.0"
+    },
+    "run": {
+      "command": [
+        "mcp-server-kubernetes"
+      ],
+      "env": {}
+    },
+    "env_keys": []
+  },
+  {
+    "id": "magic",
+    "name": "Magic",
+    "version": "0.1.0",
+    "description": "Magic MCP UI builder by 21st.dev",
+    "author": "serafim@21st.dev",
+    "downloads": 10008,
+    "categories": [
+      "UI",
+      "Frontend"
+    ],
+    "repository_url": "git+https://github.com/21st-dev/magic-mcp.git",
+    "install": {
+      "kind": "npm",
+      "package": "@21st-dev/magic",
+      "version": "0.1.0"
+    },
+    "run": {
+      "command": [
+        "magic"
+      ],
+      "env": {}
+    },
+    "env_keys": [
+      "TWENTY_FIRST_API_KEY"
+    ]
+  },
+  {
+    "id": "memory",
+    "name": "Memory",
+    "version": "2026.1.26",
+    "description": "MCP server for enabling memory for Claude through a knowledge graph",
+    "author": "Anthropic, PBC",
+    "downloads": 224340,
+    "categories": [
+      "Memory",
+      "Official"
+    ],
+    "repository_url": "git+https://github.com/modelcontextprotocol/servers.git",
+    "install": {
+      "kind": "npm",
+      "package": "@modelcontextprotocol/server-memory",
+      "version": "2026.1.26"
+    },
+    "run": {
+      "command": [
+        "mcp-server-memory"
+      ],
+      "env": {}
+    },
+    "env_keys": []
+  },
+  {
+    "id": "nodejs-debugger",
+    "name": "Nodejs Debugger",
+    "version": "0.2.2",
+    "description": "An MCP server to debug Node.js at runtime",
+    "author": "Hyperdrive",
+    "downloads": 369,
+    "categories": [
+      "Developer Tools"
+    ],
+    "repository_url": "git+https://github.com/hyperdrive-eng/mcp-nodejs-debugger.git",
+    "install": {
+      "kind": "npm",
+      "package": "@hyperdrive-eng/mcp-nodejs-debugger",
+      "version": "0.2.2"
+    },
+    "run": {
+      "command": [
+        "mcp-nodejs-debugger"
+      ],
+      "env": {}
+    },
+    "env_keys": []
+  },
+  {
+    "id": "notion",
+    "name": "Notion",
+    "version": "2.2.1",
+    "description": "Official MCP server for Notion API",
+    "author": "@notionhq",
+    "downloads": 77432,
+    "categories": [
+      "Productivity"
+    ],
+    "repository_url": "git+ssh://git@github.com/makenotion/notion-mcp-server.git",
+    "install": {
+      "kind": "npm",
+      "package": "@notionhq/notion-mcp-server",
+      "version": "2.2.1"
+    },
+    "run": {
+      "command": [
+        "notion-mcp-server"
+      ],
+      "env": {}
+    },
+    "env_keys": [
+      "NOTION_API_TOKEN"
+    ]
+  },
+  {
+    "id": "playwright",
+    "name": "Playwright",
+    "version": "0.0.75",
+    "description": "Playwright Tools for MCP",
+    "author": "Microsoft Corporation",
+    "downloads": 3226927,
+    "categories": [
+      "Browser",
+      "Testing"
+    ],
+    "repository_url": "git+https://github.com/microsoft/playwright-mcp.git",
+    "install": {
+      "kind": "npm",
+      "package": "@playwright/mcp",
+      "version": "0.0.75"
+    },
+    "run": {
+      "command": [
+        "playwright-mcp"
+      ],
+      "env": {}
+    },
+    "env_keys": []
+  },
+  {
+    "id": "playwright-ea",
+    "name": "Playwright Ea",
+    "version": "1.0.12",
+    "description": "Model Context Protocol servers for Playwright",
+    "author": "ExecuteAutomation, Ltd",
+    "downloads": 45953,
+    "categories": [
+      "Browser",
+      "Testing"
+    ],
+    "repository_url": "git+https://github.com/executeautomation/mcp-playwright.git",
+    "install": {
+      "kind": "npm",
+      "package": "@executeautomation/playwright-mcp-server",
+      "version": "1.0.12"
+    },
+    "run": {
+      "command": [
+        "playwright-mcp-server"
+      ],
+      "env": {}
+    },
+    "env_keys": []
+  },
+  {
+    "id": "postgres",
+    "name": "Postgres",
+    "version": "0.6.2",
+    "description": "MCP server for interacting with PostgreSQL databases",
+    "author": "Anthropic, PBC",
+    "downloads": 181322,
+    "categories": [
+      "Database",
+      "Official"
+    ],
+    "repository_url": null,
+    "install": {
+      "kind": "npm",
+      "package": "@modelcontextprotocol/server-postgres",
+      "version": "0.6.2"
+    },
+    "run": {
+      "command": [
+        "mcp-server-postgres",
+        "{postgres_url}"
+      ],
+      "env": {}
+    },
+    "env_keys": []
+  },
+  {
+    "id": "puppeteer",
+    "name": "Puppeteer",
+    "version": "2025.5.12",
+    "description": "MCP server for browser automation using Puppeteer",
+    "author": "Anthropic, PBC",
+    "downloads": 27914,
+    "categories": [
+      "Browser",
+      "Official"
+    ],
+    "repository_url": null,
+    "install": {
+      "kind": "npm",
+      "package": "@modelcontextprotocol/server-puppeteer",
+      "version": "2025.5.12"
+    },
+    "run": {
+      "command": [
+        "mcp-server-puppeteer"
+      ],
+      "env": {}
+    },
+    "env_keys": []
+  },
+  {
+    "id": "redis",
+    "name": "Redis",
+    "version": "2025.4.25",
+    "description": "MCP server for using Redis",
+    "author": "Anthropic, PBC",
+    "downloads": 2924,
+    "categories": [
+      "Database",
+      "Official"
+    ],
+    "repository_url": null,
+    "install": {
+      "kind": "npm",
+      "package": "@modelcontextprotocol/server-redis",
+      "version": "2025.4.25"
+    },
+    "run": {
+      "command": [
+        "mcp-server-redis",
+        "{redis_url}"
+      ],
+      "env": {}
+    },
+    "env_keys": []
+  },
+  {
+    "id": "sentry",
+    "name": "Sentry",
+    "version": "2025.1.14",
+    "description": "MCP server for retrieving issues from sentry.io",
+    "author": "",
+    "downloads": null,
+    "categories": [
+      "Observability",
+      "Official"
+    ],
+    "repository_url": null,
+    "install": {
+      "kind": "pip",
+      "package": "mcp-server-sentry",
+      "version": "2025.1.14"
+    },
+    "run": {
+      "command": [
+        "mcp-server-sentry"
+      ],
+      "env": {}
+    },
+    "env_keys": [
+      "SENTRY_AUTH_TOKEN"
+    ]
+  },
+  {
+    "id": "sequential-thinking",
+    "name": "Sequential Thinking",
+    "version": "2025.12.18",
+    "description": "MCP server for sequential thinking and problem solving",
+    "author": "Anthropic, PBC",
+    "downloads": 101080,
+    "categories": [
+      "Reasoning",
+      "Official"
+    ],
+    "repository_url": "git+https://github.com/modelcontextprotocol/servers.git",
+    "install": {
+      "kind": "npm",
+      "package": "@modelcontextprotocol/server-sequential-thinking",
+      "version": "2025.12.18"
+    },
+    "run": {
+      "command": [
+        "mcp-server-sequential-thinking"
+      ],
+      "env": {}
+    },
+    "env_keys": []
+  },
+  {
+    "id": "slack",
+    "name": "Slack",
+    "version": "2025.4.25",
+    "description": "MCP server for interacting with Slack",
+    "author": "Anthropic, PBC",
+    "downloads": 62185,
+    "categories": [
+      "Communication",
+      "Official"
+    ],
+    "repository_url": null,
+    "install": {
+      "kind": "npm",
+      "package": "@modelcontextprotocol/server-slack",
+      "version": "2025.4.25"
+    },
+    "run": {
+      "command": [
+        "mcp-server-slack"
+      ],
+      "env": {}
+    },
+    "env_keys": [
+      "SLACK_BOT_TOKEN",
+      "SLACK_TEAM_ID"
+    ]
+  },
+  {
+    "id": "sqlite",
+    "name": "Sqlite",
+    "version": "2025.4.25",
+    "description": "A simple SQLite MCP server",
+    "author": "",
+    "downloads": null,
+    "categories": [
+      "Database",
+      "Official"
+    ],
+    "repository_url": null,
+    "install": {
+      "kind": "pip",
+      "package": "mcp-server-sqlite",
+      "version": "2025.4.25"
+    },
+    "run": {
+      "command": [
+        "mcp-server-sqlite",
+        "--db-path",
+        "{sqlite_path}"
+      ],
+      "env": {}
+    },
+    "env_keys": []
+  },
+  {
+    "id": "supabase",
+    "name": "Supabase",
+    "version": "0.8.1",
+    "description": "MCP server for interacting with Supabase",
+    "author": "",
+    "downloads": 61401,
+    "categories": [
+      "Database",
+      "Cloud"
+    ],
+    "repository_url": "git+https://github.com/supabase-community/supabase-mcp.git",
+    "install": {
+      "kind": "npm",
+      "package": "@supabase/mcp-server-supabase",
+      "version": "0.8.1"
+    },
+    "run": {
+      "command": [
+        "mcp-server-supabase"
+      ],
+      "env": {}
+    },
+    "env_keys": [
+      "SUPABASE_ACCESS_TOKEN"
+    ]
+  },
+  {
+    "id": "tavily",
+    "name": "Tavily",
+    "version": "0.2.19",
+    "description": "MCP server for advanced web search using Tavily",
+    "author": "Tavily",
+    "downloads": 38866,
+    "categories": [
+      "Search"
+    ],
+    "repository_url": "git+https://github.com/tavily-ai/tavily-mcp.git",
+    "install": {
+      "kind": "npm",
+      "package": "tavily-mcp",
+      "version": "0.2.19"
+    },
+    "run": {
+      "command": [
+        "tavily-mcp"
+      ],
+      "env": {}
+    },
+    "env_keys": [
+      "TAVILY_API_KEY"
+    ]
+  },
+  {
+    "id": "time",
+    "name": "Time",
+    "version": "2026.1.26",
+    "description": "A Model Context Protocol server providing tools for time queries and timezone conversions for LLMs",
+    "author": "",
+    "downloads": null,
+    "categories": [
+      "Utilities",
+      "Official"
+    ],
+    "repository_url": null,
+    "install": {
+      "kind": "pip",
+      "package": "mcp-server-time",
+      "version": "2026.1.26"
+    },
+    "run": {
+      "command": [
+        "mcp-server-time"
+      ],
+      "env": {}
+    },
+    "env_keys": []
+  }
+]

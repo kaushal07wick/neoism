@@ -1,0 +1,24 @@
+[package]
+name = "neoism-sync"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+# CRDT-backed collaborative documents for Neoism. The sync *core*
+# (SyncDoc + transports + presence) is document-agnostic and reused for
+# any cross-device feature (notes today, live code editing later); only
+# the thin schema layer (NoteDoc) and the reMarkable bridge are specific.
+
+[features]
+# The "AirPods-fast" LAN auto-discovery. Off by default so the core stays
+# dependency-light; the desktop app turns it on.
+lan = ["dep:mdns-sd"]
+
+[dependencies]
+loro = "1.13"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+mdns-sd = { version = "0.20", optional = true }

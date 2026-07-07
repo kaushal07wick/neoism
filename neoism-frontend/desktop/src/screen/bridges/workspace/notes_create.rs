@@ -1,0 +1,217 @@
+
+use super::*;
+use crate::workspace::{self as neo_workspace};
+use std::path::PathBuf;
+
+impl Screen<'_> {
+    pub(crate) fn create_current_neoism_note(&mut self) {
+        use neoism_ui::panels::notifications::NotificationLevel;
+
+        let note_dir = self.notes_creation_dir();
+
+        let target = match unique_note_path(&note_dir) {
+            Ok(path) => path,
+            Err(err) => {
+                self.renderer
+                    .notifications
+                    .push(err, NotificationLevel::Error);
+                self.mark_dirty();
+                return;
+            }
+        };
+        let result = (|| -> std::io::Result<()> {
+            if let Some(parent) = target.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&target)?;
+            Ok(())
+        })();
+        match result {
+            Ok(()) => {
+                self.invalidate_note_index_for_path(&target);
+                self.rebuild_note_graph_for_path(&target);
+                self.renderer.notes_sidebar.refresh_notes();
+                self.refresh_file_tree_entries();
+                self.open_path_in_markdown(target);
+            }
+            Err(err) => {
+                self.renderer.notifications.push(
+                    format!("Could not create note {}: {err}", target.display()),
+                    NotificationLevel::Error,
+                );
+                self.mark_dirty();
+            }
+        }
+    }
+
+    /// Create a fresh `.neodraw` drawing in the viewed vault and open
+    /// it in the sketch editor (the ⋮ create menu in the notes sidebar).
+    #[allow(dead_code)]
+    pub(crate) fn create_current_neoism_drawing(&mut self) {
+        self.create_neoism_drawing_in(self.notes_creation_dir());
+    }
+
+    pub(crate) fn create_neoism_drawing_in(&mut self, note_dir: PathBuf) {
+        use neoism_ui::panels::notifications::NotificationLevel;
+
+        let mut target = note_dir.join("Drawing.neodraw");
+        let mut n = 2;
+        while target.exists() {
+            target = note_dir.join(format!("Drawing {n}.neodraw"));
+            n += 1;
+        }
+
+        let result = (|| -> std::io::Result<()> {
+            if let Some(parent) = target.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            // Seed with an empty, valid scene so it opens cleanly.
+            let scene = neoism_ui::editor::neodraw::Scene::empty();
+            std::fs::write(&target, scene.to_json())?;
+            Ok(())
+        })();
+        match result {
+            Ok(()) => {
+                self.renderer.notes_sidebar.refresh_notes();
+                self.refresh_file_tree_entries();
+                self.open_path_in_draw(target);
+            }
+            Err(err) => {
+                self.renderer.notifications.push(
+                    format!("Could not create drawing {}: {err}", target.display()),
+                    NotificationLevel::Error,
+                );
+                self.mark_dirty();
+            }
+        }
+    }
+
+    /// Build an Obsidian-style note-graph view: query the note link
+    /// graph, force-lay-it-out into a neodraw `Scene`, and open it on the
+    /// sketch canvas (so pan/zoom/movement come for free).
+    pub(crate) fn open_neoism_graph_view(&mut self) {
+        use neoism_ui::panels::notifications::NotificationLevel;
+
+        let root = self
+            .active_pane_workspace_root()
+            .or_else(|| self.active_workspace_root.clone())
+            .or_else(|| std::env::current_dir().ok())
+            .unwrap_or_else(|| PathBuf::from("."));
+        let note_dir = active_notes_workspace_for_root(&root)
+            .filter(|workspace| workspace.config.notes.enabled)
+            .map(|workspace| workspace.notes_workspace_dir())
+            .unwrap_or(root.clone());
+
+        let graph = match neo_workspace::NoteGraph::open(&root) {
+            Ok(graph) => graph,
+            Err(err) => {
+                self.renderer.notifications.push(
+                    format!("Could not open note graph: {err}"),
+                    NotificationLevel::Error,
+                );
+                self.mark_dirty();
+                return;
+            }
+        };
+        // Reindex first so freshly-saved `[[wiki links]]` show up as edges.
+        let _ = graph.reindex();
+        let summary = match graph.graph(neo_workspace::NoteQueryLimit(2000)) {
+            Ok(summary) => summary,
+            Err(err) => {
+                self.renderer.notifications.push(
+                    format!("Could not read note graph: {err}"),
+                    NotificationLevel::Error,
+                );
+                self.mark_dirty();
+                return;
+            }
+        };
+        if summary.nodes.is_empty() {
+            self.renderer.notifications.push(
+                "No notes to visualize yet".to_string(),
+                NotificationLevel::Info,
+            );
+            self.mark_dirty();
+            return;
+        }
+
+        let mut index = std::collections::HashMap::new();
+        let mut labels = Vec::with_capacity(summary.nodes.len());
+        let mut paths = Vec::with_capacity(summary.nodes.len());
+        for (i, node) in summary.nodes.iter().enumerate() {
+            index.insert(node.path.clone(), i);
+            labels.push(if node.title.is_empty() {
+                node.path.clone()
+            } else {
+                node.title.clone()
+            });
+            // DB paths are relative to a note root — resolve via the
+            // workspace so click-to-open finds the real file.
+            let abs = graph
+                .workspace()
+                .resolve_note_path(std::path::Path::new(&node.path));
+            paths.push(abs.to_string_lossy().into_owned());
+        }
+        let edges: Vec<(usize, usize)> = summary
+            .edges
+            .iter()
+            .filter_map(|e| {
+                Some((*index.get(&e.source_path)?, *index.get(&e.target_path)?))
+            })
+            .collect();
+
+        // Open a VIRTUAL draw tab (never written to disk — no file
+        // artifact) and attach the live animated simulation on top.
+        let target = note_dir.join("Neoism Graph.neodraw");
+        self.open_path_in_draw(target);
+        // Show a clean tab title (no `.neodraw` extension).
+        self.renderer.buffer_tabs.set_active_title("Neoism Graph");
+
+        let sim = neoism_ui::editor::neodraw::GraphSim::new(&labels, &paths, &edges);
+        if let Some(pane) = self.context_manager.current_mut().draw.as_mut() {
+            pane.graph = Some(sim);
+            pane.graph_needs_center = true;
+        }
+        self.mark_dirty();
+    }
+
+    pub(crate) fn open_neoism_notes_sidebar(&mut self) {
+        use neoism_ui::panels::notifications::NotificationLevel;
+
+        let root = self
+            .active_pane_workspace_root()
+            .or_else(|| self.active_workspace_root.clone())
+            .or_else(|| std::env::current_dir().ok())
+            .unwrap_or_else(|| PathBuf::from("."));
+        let workspace = match active_notes_workspace_for_root(&root) {
+            Some(workspace) => workspace,
+            None => match neo_workspace::init_workspace(&root) {
+                Ok(workspace) => workspace,
+                Err(err) => {
+                    self.renderer.notifications.push(
+                        format!("Could not initialize Neoism notes: {err}"),
+                        NotificationLevel::Error,
+                    );
+                    self.mark_dirty();
+                    return;
+                }
+            },
+        };
+        self.renderer.notes_sidebar.set_workspace(
+            notes_sidebar_workspace_name(&workspace),
+            Some(workspace.notes_workspace_dir()),
+        );
+        let visibility_changed = self.renderer.notes_sidebar.toggle_focus_or_visibility();
+        if self.renderer.notes_sidebar.is_visible() {
+            self.renderer.file_tree.set_focused(false);
+        }
+        if visibility_changed {
+            self.reapply_chrome_layout();
+        }
+        self.mark_dirty();
+    }
+
+}

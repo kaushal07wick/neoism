@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>dev.neoism.Neoism</id>
+  <content_rating type="oars-1.1" />
+
+  <name>Neoism</name>
+  <summary>Hardware-accelerated terminal-first editor workspace</summary>
+
+  <description>
+    <p>Neoism is a hardware-accelerated terminal-first editor workspace derived from Rio Terminal.</p>
+    <p>It pairs Rio's GPU terminal foundation with Rust-owned IDE chrome around managed Neovim, including file tree, buffer tabs, command palette, diagnostics, finder, and agent terminal tabs.</p>
+  </description>
+
+  <branding>
+    <color type="primary" scheme_preference="light">#b9a5d3</color>
+    <color type="primary" scheme_preference="dark">#2c1e3e</color>
+  </branding>
+
+  <project_license>MIT</project_license>
+  <metadata_license>CC0-1.0</metadata_license>
+
+  <launchable type="desktop-id">neoism.desktop</launchable>
+
+  <developer id="dev.neoism">
+    <name>Neoism contributors</name>
+  </developer>
+
+  <recommends>
+    <control>keyboard</control>
+    <control>pointing</control>
+    <control>touch</control>
+  </recommends>
+</component>

@@ -1,0 +1,108 @@
+use crate::panels::agent_pane::state::NeoismAgentPane;
+
+use super::{CHAT_INPUT_MIN_H, HOME_INPUT_MIN_H, INPUT_LINE_H, MAX_INPUT_LINES};
+
+/// Horizontal padding applied to both the chat timeline and the input
+/// composer in the Neoism Agent pane. Keep narrow mobile panes edge-to-edge
+/// so the shared iOS/web layout does not lose precious text width.
+pub fn chat_horizontal_pad(width: f32, s: f32) -> f32 {
+    if width < 520.0 * s {
+        0.0
+    } else {
+        12.0 * s
+    }
+}
+
+pub trait AgentPaneInput {
+    fn input(&self) -> &str;
+    fn background_task_details_expanded(&self) -> bool;
+}
+
+impl AgentPaneInput for NeoismAgentPane {
+    fn input(&self) -> &str {
+        self.input()
+    }
+
+    fn background_task_details_expanded(&self) -> bool {
+        self.background_task_details_expanded()
+    }
+}
+
+pub fn home_input_rect(pane: &impl AgentPaneInput, rect: [f32; 4], s: f32) -> [f32; 4] {
+    let [x, y, w, h] = rect;
+    let side_pad = (24.0 * s).min((w * 0.08).max(0.0));
+    let available_w = (w - side_pad * 2.0).max(1.0);
+    let input_w = (820.0 * s).min(available_w);
+    let input_h = input_height_for_width(
+        pane.input(),
+        input_w,
+        s,
+        true,
+        pane.background_task_details_expanded(),
+    );
+    let input_x = x + (w - input_w) * 0.5;
+    // The wordmark anchors a fixed gap above this card, so the pair
+    // reads as one group centered slightly above the pane's midline.
+    let input_y = y + h * 0.46;
+    [input_x, input_y, input_w, input_h]
+}
+
+/// THE shared chat column: the timeline and the composer island use
+/// the SAME x/width (insets + wide-pane cap, centered). If the
+/// timeline were wider, its content would extend past the floating
+/// input bar's borders on both sides and the bar would read as inset
+/// into a larger slab instead of floating over the column.
+pub fn chat_column(rect: [f32; 4], s: f32) -> (f32, f32) {
+    let [x, _y, w, _h] = rect;
+    let side_pad = chat_horizontal_pad(w, s) + 8.0 * s;
+    let col_w = (w - side_pad * 2.0).max(220.0).min(960.0 * s);
+    (x + (w - col_w) * 0.5, col_w)
+}
+
+pub fn chat_input_rect(pane: &impl AgentPaneInput, rect: [f32; 4], s: f32) -> [f32; 4] {
+    let [_x, y, _w, h] = rect;
+    // Floating island: same column as the timeline, lifted off the
+    // pane bottom.
+    let (input_x, input_w) = chat_column(rect, s);
+    let bottom_pad = 14.0 * s;
+    let input_h = input_height_for_width(
+        pane.input(),
+        input_w,
+        s,
+        false,
+        pane.background_task_details_expanded(),
+    );
+    [input_x, y + h - input_h - bottom_pad, input_w, input_h]
+}
+
+pub fn input_height_for_width(
+    input: &str,
+    input_w: f32,
+    s: f32,
+    show_status: bool,
+    background_details_expanded: bool,
+) -> f32 {
+    let text_w = (input_w - 48.0 * s).max(32.0 * s);
+    let char_w = (16.0 * s * 0.58).max(1.0);
+    let cols = (text_w / char_w).floor().max(1.0) as usize;
+    let estimated_lines = input
+        .split('\n')
+        .map(|line| line.chars().count().max(1).div_ceil(cols))
+        .sum::<usize>()
+        .max(1)
+        .min(MAX_INPUT_LINES);
+    let min_h = if show_status {
+        HOME_INPUT_MIN_H
+    } else {
+        CHAT_INPUT_MIN_H
+    };
+    // Base = box paddings + the send band + the skirt chip row below
+    // the box. Chat stays slightly tighter than the home splash card.
+    let base_h = if show_status { 84.0 } else { 76.0 };
+    let status_extra_h = if show_status && background_details_expanded {
+        96.0
+    } else {
+        0.0
+    };
+    (min_h * s).max((base_h + status_extra_h + estimated_lines as f32 * INPUT_LINE_H) * s)
+}

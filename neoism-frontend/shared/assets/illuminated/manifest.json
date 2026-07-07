@@ -1,0 +1,54 @@
+{
+  "id": "neoism-illuminated-starter-packs",
+  "version": "0.1.0",
+  "description": "Starter illuminated initial packs for opt-in markdown tokens.",
+  "packs": [
+    {
+      "id": "google-ofl-display-fonts",
+      "name": "Google OFL Display Initial Fonts",
+      "kind": "font-pack",
+      "license": "SIL Open Font License 1.1",
+      "source": "https://github.com/google/fonts",
+      "styles": [
+        {
+          "id": "fraktur",
+          "file": "fonts/google-ofl/UnifrakturCook-Bold.ttf",
+          "sourcePath": "ofl/unifrakturcook/UnifrakturCook-Bold.ttf"
+        },
+        {
+          "id": "maguntia",
+          "file": "fonts/google-ofl/UnifrakturMaguntia-Book.ttf",
+          "sourcePath": "ofl/unifrakturmaguntia/UnifrakturMaguntia-Book.ttf"
+        },
+        {
+          "id": "cinzel",
+          "file": "fonts/google-ofl/CinzelDecorative-Bold.ttf",
+          "sourcePath": "ofl/cinzeldecorative/CinzelDecorative-Bold.ttf"
+        },
+        {
+          "id": "storybook",
+          "file": "fonts/google-ofl/CinzelDecorative-Black.ttf",
+          "sourcePath": "ofl/cinzeldecorative/CinzelDecorative-Black.ttf"
+        },
+        {
+          "id": "pirata",
+          "file": "fonts/google-ofl/PirataOne-Regular.ttf",
+          "sourcePath": "ofl/pirataone/PirataOne-Regular.ttf"
+        },
+        {
+          "id": "medieval",
+          "file": "fonts/google-ofl/MedievalSharp.ttf",
+          "sourcePath": "ofl/medievalsharp/MedievalSharp.ttf"
+        }
+      ]
+    },
+    {
+      "id": "reusable-art-16th-century",
+      "name": "Reusable Art 16th Century Illuminated Letters",
+      "kind": "image-alphabet",
+      "license": "Public domain according to ReusableArt.com collection description; per-letter source pages are retained in the pack manifest.",
+      "source": "https://www.reusableart.com/alphabets_letters/full-alphabets/illuminated-letters",
+      "manifest": "public-domain/reusable-art/manifest.json"
+    }
+  ]
+}

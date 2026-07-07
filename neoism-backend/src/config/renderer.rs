@@ -1,0 +1,137 @@
+use serde::{Deserialize, Serialize};
+use std::fmt::Display;
+use std::path::PathBuf;
+// `Filter` is wgpu-only (librashader runtime is wgpu-only upstream).
+// Gated together with the `wgpu` feature.
+#[cfg(feature = "wgpu")]
+use sugarloaf::Filter;
+#[cfg(feature = "wgpu")]
+use sugarloaf::ShaderOverlayConfig;
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct Renderer {
+    #[serde(default = "Backend::default", skip_serializing)]
+    pub backend: Backend,
+    #[serde(default = "bool::default", rename = "disable-unfocused-render")]
+    pub disable_unfocused_render: bool,
+    #[serde(
+        default = "default_disable_occluded_render",
+        rename = "disable-occluded-render"
+    )]
+    pub disable_occluded_render: bool,
+    #[serde(default = "Vec::default")]
+    #[cfg(feature = "wgpu")]
+    pub filters: Vec<Filter>,
+    #[serde(default = "Vec::default", rename = "shader-overlays")]
+    pub shader_overlays: Vec<PathBuf>,
+    #[serde(default = "RendererStategy::default")]
+    pub strategy: RendererStategy,
+    /// Use the CPU rasterizer (tiny-skia) instead of the GPU pipeline.
+    /// Experimental. v1 supports solid quads + glyphs only; image
+    /// overlays, GPU filters, advanced underline styles, and corner radii
+    /// are not yet implemented on the CPU path.
+    #[serde(default = "default_use_cpu", rename = "use-cpu")]
+    pub use_cpu: bool,
+}
+
+fn default_use_cpu() -> bool {
+    false
+}
+
+fn default_disable_occluded_render() -> bool {
+    false
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub enum RendererStategy {
+    #[default]
+    #[serde(alias = "events")]
+    Events,
+    #[serde(alias = "game")]
+    Game,
+}
+
+impl RendererStategy {
+    #[inline]
+    pub fn is_game(&self) -> bool {
+        self == &RendererStategy::Game
+    }
+
+    #[inline]
+    pub fn is_event_based(&self) -> bool {
+        self == &RendererStategy::Events
+    }
+}
+
+#[allow(clippy::derivable_impls)]
+impl Default for Renderer {
+    fn default() -> Renderer {
+        Renderer {
+            backend: Backend::default(),
+            disable_unfocused_render: false,
+            disable_occluded_render: default_disable_occluded_render(),
+            #[cfg(feature = "wgpu")]
+            filters: Vec::default(),
+            shader_overlays: Vec::default(),
+            strategy: RendererStategy::Events,
+            use_cpu: default_use_cpu(),
+        }
+    }
+}
+
+#[cfg(feature = "wgpu")]
+impl Renderer {
+    pub fn shader_overlay_config(&self) -> ShaderOverlayConfig {
+        ShaderOverlayConfig::new(self.shader_overlays.clone())
+    }
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
+pub enum Backend {
+    // Leave Sugarloaf/WGPU to decide
+    #[serde(alias = "automatic")]
+    #[cfg_attr(not(target_os = "macos"), default)]
+    Automatic,
+    // Supported on Linux/Android, the web through webassembly via WebGL, and Windows and macOS/iOS via ANGLE
+    #[serde(alias = "gl")]
+    GL,
+    // Supported on Windows, Linux/Android, and macOS/iOS via Vulkan Portability (with the Vulkan feature enabled)
+    #[serde(alias = "vulkan")]
+    Vulkan,
+    // Supported on Windows 10
+    #[serde(alias = "dx12")]
+    DX12,
+    // Supported on macOS/iOS
+    #[serde(alias = "wgpumetal")]
+    WgpuMetal,
+    #[cfg(target_os = "macos")]
+    #[cfg_attr(target_os = "macos", default)]
+    #[serde(alias = "metal")]
+    Metal,
+}
+
+impl Display for Backend {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Backend::Automatic => {
+                write!(f, "Automatic")
+            }
+            #[cfg(target_os = "macos")]
+            Backend::Metal => {
+                write!(f, "Metal")
+            }
+            Backend::WgpuMetal => {
+                write!(f, "Metal")
+            }
+            Backend::Vulkan => {
+                write!(f, "Vulkan")
+            }
+            Backend::GL => {
+                write!(f, "GL")
+            }
+            Backend::DX12 => {
+                write!(f, "DX12")
+            }
+        }
+    }
+}

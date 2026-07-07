@@ -1,0 +1,18 @@
+[package]
+name = "neoism-rm-agent"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+# The tiny companion that runs ON the reMarkable. It tails xochitl's .rm
+# files and streams stroke updates to Neoism so handwriting shows up live.
+# Cross-compiled to the tablet's ARM (armv7-unknown-linux-gnueabihf).
+
+[[bin]]
+name = "neoism-rm-agent"
+path = "src/main.rs"
+
+[dependencies]
+neoism-sync = { workspace = true }

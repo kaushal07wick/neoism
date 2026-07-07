@@ -1,0 +1,98 @@
+name: Build Mac/Windows
+
+# Iteration workflow for the two release legs that don't build yet —
+# darwin-aarch64 and windows-x86_64. Mirrors the Release Neoism build steps
+# without publishing, so fixes can be validated here cheaply (no Linux
+# rebuild per attempt). Once green, keep release-neoism.yml's steps in sync.
+
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Which legs to build"
+        type: choice
+        default: all
+        options: [all, windows, darwin]
+
+env:
+  CARGO_TERM_COLOR: always
+  # Same runner-safe codegen as release-neoism.yml.
+  CARGO_PROFILE_RELEASE_DEBUG: "0"
+  CARGO_PROFILE_RELEASE_LTO: "thin"
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+
+jobs:
+  build:
+    name: ${{ matrix.goos }}-${{ matrix.goarch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ inputs.only == 'windows' && fromJSON('[{"runner":"windows-latest","goos":"windows","goarch":"x86_64","target":"x86_64-pc-windows-msvc"}]') || inputs.only == 'darwin' && fromJSON('[{"runner":"macos-latest","goos":"darwin","goarch":"aarch64","target":"aarch64-apple-darwin"}]') || fromJSON('[{"runner":"macos-latest","goos":"darwin","goarch":"aarch64","target":"aarch64-apple-darwin"},{"runner":"windows-latest","goos":"windows","goarch":"x86_64","target":"x86_64-pc-windows-msvc"}]') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install macOS build deps
+        if: matrix.goos == 'darwin'
+        run: brew install glslang
+
+      # Chocolatey's glslang package no longer exists; fetch the official
+      # Khronos build from the rolling main-tot release instead.
+      - name: Install Windows build deps (glslang)
+        if: matrix.goos == 'windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          curl.exe -fsSL -o glslang.zip https://github.com/KhronosGroup/glslang/releases/download/main-tot/glslang-master-windows-Release.zip
+          Expand-Archive glslang.zip -DestinationPath "$env:RUNNER_TEMP\glslang"
+          $exe = Get-ChildItem -Recurse -Filter glslangValidator.exe "$env:RUNNER_TEMP\glslang" | Select-Object -First 1
+          if (-not $exe) { throw "glslangValidator.exe not found in the zip" }
+          $exe.DirectoryName | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          "GLSLANG_VALIDATOR=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build the stack (release)
+        # Unset CI: `fff-search`'s build script demands Zig when CI is set.
+        shell: bash
+        run: |
+          env -u CI cargo build --release --locked --target ${{ matrix.target }} \
+            -p neoism -p neoism-workspace-daemon -p neoism-agent --features wgpu
+
+      # Package + upload the same tarball release-neoism.yml ships so a
+      # dispatch run yields a downloadable production artifact, not just a
+      # compile check. Windows stays build-only until validated at runtime.
+      - name: Build Tree-sitter runtime bundle
+        if: matrix.goos != 'windows'
+        shell: bash
+        run: ./scripts/build-treesitter-runtime.sh stage-runtime "${{ github.ref_name }}"
+
+      - name: Package neoism-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
+        if: matrix.goos != 'windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="neoism-${{ matrix.goos }}-${{ matrix.goarch }}"
+          mkdir -p "stage/$OUT"
+          BIN="target/${{ matrix.target }}/release"
+          cp "$BIN/neoism" "$BIN/neoism-workspace-daemon" "$BIN/neoism-agent" "stage/$OUT/"
+          cp misc/rio.terminfo "stage/$OUT/" 2>/dev/null || true
+          cp -r stage-runtime "stage/$OUT/runtime"
+          tar -C stage -czf "$OUT.tar.gz" "$OUT"
+          if command -v sha256sum >/dev/null; then sha256sum "$OUT.tar.gz" > "$OUT.tar.gz.sha256";
+          else shasum -a 256 "$OUT.tar.gz" > "$OUT.tar.gz.sha256"; fi
+
+      - name: Upload build artifact
+        if: matrix.goos != 'windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: neoism-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            neoism-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
+            neoism-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz.sha256

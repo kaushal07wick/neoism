@@ -1,0 +1,204 @@
+name: Release Neoism
+
+# Builds the full Neoism stack (desktop + daemon + agent) for Linux, macOS,
+# and Windows, then uploads `neoism-<os>-<arch>.*` to the GitHub Release — the assets
+# the `scripts/install.sh` one-liner downloads. Free (no GoReleaser Pro).
+#
+# Cut a release:  git tag v0.4.0 && git push origin v0.4.0
+# Dry run:        Actions → Release Neoism → Run workflow
+#
+# NOTE: the older `release.yml` + `.goreleaser.yaml` are inherited from Rio
+# (build `rioterm`, GoReleaser Pro). Disable that workflow so the two don't
+# both fire on tags. macOS .dmg signing/notarization is a later add (needs an
+# Apple Developer account).
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  # The workspace release profile (debug=full, lto=true, codegen-units=1)
+  # OOM-kills 16GB hosted runners while LTO-compiling the desktop crate
+  # (see build-stack.yml). Local ./install.sh builds keep the full-fat
+  # profile; published binaries trade a few % codegen for actually building.
+  CARGO_PROFILE_RELEASE_DEBUG: "0"
+  CARGO_PROFILE_RELEASE_LTO: "thin"
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+
+jobs:
+  build:
+    name: ${{ matrix.goos }}-${{ matrix.goarch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-latest, goos: linux,  goarch: x86_64,  target: x86_64-unknown-linux-gnu }
+          - { runner: macos-latest,  goos: darwin, goarch: aarch64, target: aarch64-apple-darwin }
+          # darwin-x86_64 dropped: GitHub retired the macos-13 Intel runners,
+          # so the job queues forever. Re-add via cross-compile from arm64
+          # (aarch64 mac runner + x86_64-apple-darwin target) if Intel macs
+          # ever matter.
+          # - { runner: macos-13,      goos: darwin, goarch: x86_64,  target: x86_64-apple-darwin }
+          # windows compiles (see build-mac-win.yml, the compile guard) but
+          # has never been RUN on a real Windows machine — don't publish
+          # artifacts until someone validates it at runtime, then re-add.
+          # - { runner: windows-latest, goos: windows, goarch: x86_64,  target: x86_64-pc-windows-msvc }
+          # linux-aarch64 dropped for now: `ubuntu-24.04-arm` isn't free on a
+          # private repo. Re-add via cross-compile or a paid/public runner.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux build deps
+        if: matrix.goos == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config cmake \
+            libwayland-dev libxkbcommon-dev libxcb1-dev \
+            libfontconfig1-dev libfreetype6-dev \
+            glslang-tools libssl-dev
+
+      - name: Install macOS build deps
+        if: matrix.goos == 'darwin'
+        run: brew install glslang
+
+      # Chocolatey's glslang package no longer exists; fetch the official
+      # Khronos build (same step as build-mac-win.yml).
+      - name: Install Windows build deps
+        if: matrix.goos == 'windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          curl.exe -fsSL -o glslang.zip https://github.com/KhronosGroup/glslang/releases/download/main-tot/glslang-master-windows-Release.zip
+          Expand-Archive glslang.zip -DestinationPath "$env:RUNNER_TEMP\glslang"
+          $exe = Get-ChildItem -Recurse -Filter glslangValidator.exe "$env:RUNNER_TEMP\glslang" | Select-Object -First 1
+          if (-not $exe) { throw "glslangValidator.exe not found in the zip" }
+          $exe.DirectoryName | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          "GLSLANG_VALIDATOR=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build the stack (release)
+        # Unset CI: `fff-search`'s build script demands Zig when CI is set,
+        # but it builds fine natively (exactly like the local build).
+        shell: bash
+        run: |
+          env -u CI cargo build --release --locked --target ${{ matrix.target }} \
+            -p neoism -p neoism-workspace-daemon -p neoism-agent --features wgpu
+
+      # Shipped as `runtime/` next to the binaries; the app's first-run
+      # bootstrap installs it into the user's data dir.
+      - name: Build Tree-sitter runtime bundle
+        if: matrix.goos != 'windows'
+        shell: bash
+        run: ./scripts/build-treesitter-runtime.sh stage-runtime "${{ github.ref_name }}"
+
+      - name: Package neoism-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
+        if: matrix.goos != 'windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="neoism-${{ matrix.goos }}-${{ matrix.goarch }}"
+          mkdir -p "stage/$OUT"
+          BIN="target/${{ matrix.target }}/release"
+          cp "$BIN/neoism" "$BIN/neoism-workspace-daemon" "$BIN/neoism-agent" "stage/$OUT/"
+          cp misc/rio.terminfo "stage/$OUT/" 2>/dev/null || true
+          cp -r stage-runtime "stage/$OUT/runtime"
+          tar -C stage -czf "$OUT.tar.gz" "$OUT"
+          if command -v sha256sum >/dev/null; then sha256sum "$OUT.tar.gz" > "$OUT.tar.gz.sha256";
+          else shasum -a 256 "$OUT.tar.gz" > "$OUT.tar.gz.sha256"; fi
+
+      - name: Package neoism-${{ matrix.goos }}-${{ matrix.goarch }}.zip
+        if: matrix.goos == 'windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $out = "neoism-${{ matrix.goos }}-${{ matrix.goarch }}"
+          New-Item -ItemType Directory -Force -Path "stage/$out" | Out-Null
+          $bin = "target/${{ matrix.target }}/release"
+          Copy-Item "$bin/neoism.exe", "$bin/neoism-workspace-daemon.exe", "$bin/neoism-agent.exe" "stage/$out/"
+          if (Test-Path "misc/rio.terminfo") { Copy-Item "misc/rio.terminfo" "stage/$out/" }
+          Compress-Archive -Path "stage/$out" -DestinationPath "$out.zip" -Force
+          $hash = Get-FileHash "$out.zip" -Algorithm SHA256
+          "$($hash.Hash.ToLower())  $out.zip" | Set-Content -NoNewline "$out.zip.sha256"
+
+      # Publishes the built binaries to this repo's GitHub Releases, where the
+      # curl|bash installer and `neoism update` fetch them. Uses the built-in
+      # GITHUB_TOKEN (contents:write on the current repo) — no PAT needed.
+      # Legs finish at very different speeds (warm macOS caches beat the
+      # Linux leg by 20+ minutes). Publishing per-leg opened a window where
+      # `neoism update` saw the new tag but 404'd on its platform tarball —
+      # so every leg uploads to a DRAFT, and the `publish` job below flips
+      # it public only after ALL legs have attached their assets.
+      - name: Publish Unix artifacts to public dist repo
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') && matrix.goos != 'windows'
+        with:
+          repository: parkers0405/neoism
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          draft: true
+          files: |
+            neoism-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
+            neoism-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz.sha256
+          fail_on_unmatched_files: true
+
+      - name: Publish Windows artifacts to public dist repo
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') && matrix.goos == 'windows'
+        with:
+          repository: parkers0405/neoism
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          draft: true
+          files: |
+            neoism-${{ matrix.goos }}-${{ matrix.goarch }}.zip
+            neoism-${{ matrix.goos }}-${{ matrix.goarch }}.zip.sha256
+          fail_on_unmatched_files: true
+
+      - name: Upload Unix build artifact (dry runs)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') && matrix.goos != 'windows' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: neoism-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            neoism-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
+            neoism-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz.sha256
+
+      - name: Upload Windows build artifact (dry runs)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') && matrix.goos == 'windows' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: neoism-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            neoism-${{ matrix.goos }}-${{ matrix.goarch }}.zip
+            neoism-${{ matrix.goos }}-${{ matrix.goarch }}.zip.sha256
+
+  # Flip the dist release public only once EVERY leg has uploaded its
+  # assets — closes the per-leg publish race where `neoism update` saw
+  # the new tag before its platform tarball existed (v0.4.5 404s).
+  # If any leg fails, the draft stays hidden and updaters keep serving
+  # the previous release.
+  publish:
+    name: publish dist release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Undraft the dist release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${{ github.ref_name }}" -R parkers0405/neoism --draft=false --latest

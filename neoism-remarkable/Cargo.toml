@@ -1,0 +1,17 @@
+[package]
+name = "neoism-remarkable"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+# The reMarkable sync *plugin* — kept out of Neoism core. The desktop app
+# depends on this only behind its `remarkable` feature (off by default), so
+# core (draw-over-markdown etc.) carries none of it. Work in progress: the
+# end-state is a daemon-client process speaking `neoism-protocol`.
+
+[dependencies]
+neoism-sync = { workspace = true }
+neoism-ui = { workspace = true }
+neoism-workspace-index = { workspace = true }

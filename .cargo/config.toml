@@ -1,0 +1,13 @@
+[target.wasm32-unknown-unknown]
+# Enabled unstable APIs from web_sys.
+rustflags = "--cfg=web_sys_unstable_apis"
+runner = 'wasm-bindgen-test-runner'
+
+[target.aarch64-apple-darwin]
+# We can guarantee that this target will always run on a CPU with _at least_
+# these capabilities, so let's optimize for them.
+rustflags = "-Ctarget-cpu=apple-m1"
+
+[target.'cfg(target_os = "windows")']
+# This cfg will reduce the size of `windows::core::Error` from 16 bytes to 4 bytes.
+rustflags = "--cfg windows_slim_errors"

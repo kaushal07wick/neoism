@@ -1,0 +1,74 @@
+Neoism
+======
+
+Neoism is a terminal-first workspace for code, notes, agents, and multiplayer
+editing. The great majority of Neoism — its editor, agent runtime, workspace
+daemon, sync/CRDT layer, notebooks, drawing surfaces, extensions system, and UI
+chrome — is original work by the Neoism contributors, licensed under the MIT
+License (see LICENSE).
+
+Neoism's terminal core and GPU renderer descend from Rio Terminal, which in turn
+descends from Alacritty. Those and the other third-party components listed below
+retain their original copyright and license notices. Where a source file carries
+an upstream copyright header, that header is authoritative for that file.
+
+
+Terminal core & renderer lineage
+---------------------------------
+
+Rio Terminal — MIT License, Copyright (c) 2022-present Raphael Amorim and
+contributors. Neoism's `sugarloaf` (GPU renderer), `teletypewriter` (PTY),
+`corcovado`, `copa`, `neoism-terminal-core`, `neoism-backend`, and parts of
+`neoism-window` are derived from Rio. Neoism extends the sugarloaf renderer with
+additional first-party subsystems (notably the virtual-surface editor/markdown/
+agent rendering path and shader overlay); the Rio-derived code remains under
+Rio's copyright and MIT license.
+
+Alacritty — Apache-2.0 License, Copyright (c) The Alacritty Project. The terminal
+grid model (`neoism-terminal-core/src/crosswords`) and VTE parser lineage
+originate in Alacritty; affected source files retain their Alacritty attribution.
+
+
+Bundled and forked third-party components
+-----------------------------------------
+
+vte (via `copa`) — Apache-2.0 OR MIT, Copyright (c) 2016 Joe Wilm and the vte
+contributors. See copa/ORIGINAL-LICENSE-MIT and copa/ORIGINAL-LICENSE-APACHE.
+
+mio 0.6.x (via `corcovado`) — MIT, Copyright (c) 2014 Carl Lerche and the mio
+contributors. See corcovado/ORIGINAL_LICENSE.
+
+winit (via `neoism-window`) — Apache-2.0, Copyright (c) The winit contributors.
+`neoism-window` is a fork of winit; the Apache-2.0 terms apply to the derived
+window and event-loop code.
+
+wezterm-char-props (via `neoism-grapheme-width`) — MIT, Copyright (c) Wez Furlong.
+
+fff-search (vendored in `vendor/fff-search`) — MIT, Copyright (c) Dmitriy
+Kovalenko. See vendor/fff-search/LICENSE.
+
+newpixiecrt shaders (`sugarloaf/src/components/filters/builtin/newpixiecrt`) —
+MIT / public domain, Copyright (c) 2016 Mattias Gustavsson, adapted by hunterk.
+
+hlchunk.nvim runtime (`neoism-backend/src/performer/nvim_runtime/lua/hlchunk`) —
+MIT, Copyright (c) 2023 shellRaining.
+
+
+Fonts
+-----
+
+Cascadia Code — SIL Open Font License 1.1, Copyright (c) Microsoft Corporation.
+Symbols Nerd Font — MIT License, Copyright (c) Ryan L McIntyre (Nerd Fonts).
+DejaVu fonts (test resources) — Bitstream Vera / DejaVu license (permissive).
+Exo 2 (test resources) — SIL Open Font License 1.1.
+Cinzel Decorative, MedievalSharp, Pirata One, UnifrakturCook — SIL Open Font
+License 1.1. See neoism-frontend/shared/assets/illuminated/fonts/google-ofl.
+
+
+Notes
+-----
+
+This NOTICE is a summary for convenience. Individual source files and vendored
+directories may carry their own LICENSE files or copyright headers, which take
+precedence for those files. Adding or removing Neoism branding does not remove
+upstream copyright and license notices, and vice versa.

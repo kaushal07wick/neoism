@@ -1,0 +1,122 @@
+name: Build Stack (Linux)
+
+# Builds everything `./install.sh` builds, on GitHub — Linux only for now:
+#   - neoism (desktop)
+#   - neoism-workspace-daemon
+#   - neoism-agent
+#   - wasm renderer bundle + Vite web build
+# Uploads the binaries and the web dist as workflow artifacts so a green run
+# means a machine can install this commit with `./install.sh`.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "**/*.rs"
+      - "**/Cargo.toml"
+      - "Cargo.lock"
+      - "neoism-frontend/web/**"
+      - "install.sh"
+      - ".github/workflows/build-stack.yml"
+
+concurrency:
+  group: build-stack-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # The workspace release profile (debug=full, lto=true, codegen-units=1) OOMs
+  # the 16GB hosted runner while LTO-compiling the desktop crate (SIGTERM/143)
+  # and its target dir outgrows runner disk. CI only proves the stack compiles,
+  # so trade the heavy codegen for fitting on the runner.
+  CARGO_PROFILE_RELEASE_DEBUG: "0"
+  CARGO_PROFILE_RELEASE_LTO: "false"
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+
+jobs:
+  linux:
+    name: linux-x86_64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config cmake \
+            libwayland-dev libxkbcommon-dev libxcb1-dev \
+            libfontconfig1-dev libfreetype6-dev \
+            glslang-tools libssl-dev
+
+      # rust-toolchain.toml pins 1.92; install it directly so the first cargo
+      # call doesn't spend time bootstrapping the toolchain.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.92"
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: build-stack-linux
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: neoism-frontend/web/package-lock.json
+
+      - name: Install wasm-pack
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+
+      - name: Build desktop, daemon, and agent (release)
+        # Unset CI: `fff-search`'s build script demands Zig when CI is set,
+        # but it builds fine natively (exactly like the local build).
+        run: |
+          env -u CI cargo build --release --locked \
+            -p neoism -p neoism-workspace-daemon -p neoism-agent
+
+      - name: Install web dependencies
+        run: npm --prefix neoism-frontend/web ci
+
+      # `npm run build` regenerates the wasm bundle via scripts/build-wasm.sh
+      # before tsc + vite, matching install.sh's wasm-then-web order.
+      - name: Build wasm bundle + web app
+        run: npm --prefix neoism-frontend/web run build
+
+      # Shipped as `runtime/` next to the binaries; the app's first-run
+      # bootstrap installs it into the user's data dir (see
+      # neoism-frontend/desktop/src/bootstrap.rs).
+      - name: Build Tree-sitter runtime bundle
+        run: ./scripts/build-treesitter-runtime.sh stage-runtime "${{ github.sha }}"
+
+      - name: Package binaries
+        run: |
+          set -euo pipefail
+          OUT="neoism-linux-x86_64"
+          mkdir -p "stage/$OUT"
+          cp target/release/neoism \
+             target/release/neoism-workspace-daemon \
+             target/release/neoism-agent \
+             "stage/$OUT/"
+          cp misc/rio.terminfo "stage/$OUT/" 2>/dev/null || true
+          cp -r stage-runtime "stage/$OUT/runtime"
+          tar -C stage -czf "$OUT.tar.gz" "$OUT"
+          sha256sum "$OUT.tar.gz" > "$OUT.tar.gz.sha256"
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: neoism-linux-x86_64
+          path: |
+            neoism-linux-x86_64.tar.gz
+            neoism-linux-x86_64.tar.gz.sha256
+
+      - name: Upload web build
+        uses: actions/upload-artifact@v4
+        with:
+          name: neoism-web-dist
+          path: neoism-frontend/web/dist

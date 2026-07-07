@@ -1,0 +1,38 @@
+services:
+  daemon:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: neoism-daemon:local
+    restart: unless-stopped
+    ports:
+      - "9876:9876"
+    environment:
+      NEOISM_DAEMON_ADDR: 0.0.0.0:9876
+      NEOISM_DAEMON_DATA_DIR: /var/lib/neoism/data
+      NEOISM_CONFIG_DIR: /var/lib/neoism/config
+      NEOISM_WORKSPACES_DIR: /var/lib/neoism/workspaces
+      RUST_LOG: info,neoism_workspace_daemon=debug
+      # Set at deploy time. Used by POST /workspace/from-git.
+      # NEOISM_CLOUD_PROVISION_TOKEN: change-me
+      # Optional legacy websocket/provision token.
+      # NEOISM_DAEMON_TOKEN: change-me-too
+      # Require Workspace Hello to present a pairing/device/daemon token.
+      NEOISM_REQUIRE_AUTH: "1"
+    volumes:
+      - neoism-state:/var/lib/neoism/state
+      - neoism-data:/var/lib/neoism/data
+      - neoism-config:/var/lib/neoism/config
+      - neoism-workspaces:/var/lib/neoism/workspaces
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9876/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  neoism-state:
+  neoism-data:
+  neoism-config:
+  neoism-workspaces:

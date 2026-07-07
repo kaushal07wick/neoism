@@ -1,0 +1,13 @@
+[package]
+name = "neoism-protocol"
+version = "0.4.0"
+edition = "2021"
+license = "MIT"
+description = "Wire-format definitions for neoism client/daemon communication"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = "1"
+thiserror = "1"
+subtle = "2.5"
+uuid = { workspace = true }

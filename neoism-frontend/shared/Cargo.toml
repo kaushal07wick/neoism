@@ -1,0 +1,50 @@
+[package]
+name = "neoism-ui"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Shared chrome rendering for Neoism (native + web)."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+neoism-terminal-core = { workspace = true }
+neoism-protocol = { workspace = true }
+sugarloaf = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+smol_str = { workspace = true, features = ["serde"] }
+bitflags = { workspace = true, features = ["serde"] }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+unicode-width = { workspace = true }
+rustc-hash = "2.1.2"
+web-time = "1.1"
+image_rs = { workspace = true }
+lru = "0.16.0"
+base64 = { workspace = true }
+# `sync` keeps the Yrs `UndoManager` (Wave 7D per-user undo) Send+Sync
+# so the daemon can hold `CrdtTextBuffer`s across threads.
+yrs = { version = "0.26", features = ["sync"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# Pulls in sqlx + tokio + notify (native-only). Wasm builds replace
+# the workspace-index virtuals with a no-op stub in `virtuals.rs`.
+neoism-workspace-index = { workspace = true }
+# Used by `terminal_blocks::shell` to discover the user's history file
+# and home dir for `~` expansion. Wasm uses inert stubs.
+dirs = "6.0.0"
+tree-sitter-highlight = "0.26.9"
+tree-sitter-javascript = "0.25.0"
+tree-sitter-language = "0.1.5"
+tree-sitter-rust = "0.24.2"
+tree-sitter-typescript = "0.23.2"
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"
+web-sys = { version = "0.3", features = ["Window", "Storage"] }
+wasm-bindgen = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

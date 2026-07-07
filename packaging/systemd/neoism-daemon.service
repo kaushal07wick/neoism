@@ -1,0 +1,17 @@
+[Unit]
+Description=Neoism workspace daemon
+Documentation=https://github.com/parkersettle/neoism
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/env neoism-workspace-daemon
+Restart=on-failure
+RestartSec=2s
+Environment=RUST_LOG=info,neoism_workspace_daemon=debug
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

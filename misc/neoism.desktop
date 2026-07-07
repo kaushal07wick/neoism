@@ -1,0 +1,17 @@
+[Desktop Entry]
+Type=Application
+TryExec=neoism
+Exec=neoism
+Icon=neoism
+Terminal=false
+Categories=System;TerminalEmulator;Development;
+
+Name=Neoism
+GenericName=Terminal-first editor workspace
+Comment=A hardware-accelerated terminal-first editor workspace
+StartupWMClass=neoism
+Actions=New;
+
+[Desktop Action New]
+Name=New Neoism Window
+Exec=neoism --new-window
