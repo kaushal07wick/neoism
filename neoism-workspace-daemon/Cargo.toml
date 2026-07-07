@@ -1,6 +1,6 @@
 [package]
 name = "neoism-workspace-daemon"
-version = "0.4.0"
+version.workspace = true
 edition = "2021"
 license = "MIT"
 description = "Neoism workspace daemon hosting the wire protocol"

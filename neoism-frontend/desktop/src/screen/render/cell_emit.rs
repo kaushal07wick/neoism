@@ -8,9 +8,12 @@ impl Screen<'_> {
         &mut self,
         ctx: &FrameCtx,
         animation_dt: std::time::Duration,
-        _is_fullscreen: bool,
+        is_fullscreen: bool,
         before_present: &mut dyn FnMut(),
     ) {
+        // `is_fullscreen` is consumed only by the macOS traffic-light inset below.
+        #[cfg(not(target_os = "macos"))]
+        let _ = is_fullscreen;
         let current_route = ctx.current_route;
         let window_id = ctx.window_id;
         let render_started = ctx.render_started;

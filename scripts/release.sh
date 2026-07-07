@@ -27,6 +27,11 @@ CURRENT="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
 echo "==> bumping workspace version: $CURRENT -> $VERSION"
 sed -i "0,/^version = \"$CURRENT\"/s//version = \"$VERSION\"/" Cargo.toml
 
+# Keep internal path-dependency version pins in lockstep with the workspace
+# version. Without this a minor/major bump fails to resolve (a `^0.5.0` pin
+# can't match a 0.6.0 crate). Only rewrites lines that declare a local `path`.
+sed -i -E "/path = \"[^\"]+\"/ s/version = \"[0-9]+\.[0-9]+\.[0-9]+\"/version = \"$VERSION\"/" Cargo.toml
+
 echo "==> refreshing Cargo.lock (workspace members only)"
 cargo +1.92 update --workspace --quiet
 
