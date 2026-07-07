@@ -19,6 +19,9 @@ use neoism_ui::panels::agent_pane::api_mapping::{
     model_options_from_providers_json, session_state_from_json, ConfigDefaults,
     SessionState,
 };
+use neoism_ui::panels::agent_pane::session_group::{
+    group_session_options, SessionOptionInput,
+};
 
 const SUBAGENT_TREE_MAX_DEPTH: usize = 5;
 const SUBAGENT_TREE_MAX_ROWS: usize = 80;
@@ -167,11 +170,11 @@ pub(super) fn fetch_skill_options(
         .collect())
 }
 
-pub(super) fn fetch_session_options(
+/// Fetch the recent sessions for `directory`, newest-first, capped to 24.
+fn fetch_sessions_sorted(
     server: &str,
-    current_id: Option<&str>,
     directory: Option<&str>,
-) -> Result<Vec<NeoismAgentPickerOption>, String> {
+) -> Result<Vec<Value>, String> {
     let path = directory
         .filter(|directory| !directory.trim().is_empty())
         .map(|dir| format!("/session?roots=true&directory={}", percent_encode(dir)))
@@ -181,12 +184,38 @@ pub(super) fn fetch_session_options(
     let sessions = value
         .as_array()
         .ok_or_else(|| "Neoism Agent returned malformed sessions".to_string())?;
-    let mut sessions = sessions.iter().collect::<Vec<_>>();
+    let mut sessions = sessions.to_vec();
     sessions.sort_by(|a, b| session_updated_at(b).cmp(&session_updated_at(a)));
+    sessions.truncate(24);
+    Ok(sessions)
+}
+
+pub(super) fn fetch_session_options(
+    server: &str,
+    current_id: Option<&str>,
+    directory: Option<&str>,
+) -> Result<Vec<NeoismAgentPickerOption>, String> {
+    let sessions = fetch_sessions_sorted(server, directory)?;
+    let inputs = sessions
+        .iter()
+        .filter_map(|session| session_option_input(session, current_id))
+        .collect::<Vec<_>>();
+    Ok(group_session_options(inputs))
+}
+
+/// Flat side-panel session entries (no header rows — the side panel injects
+/// its own date-group headers). Carries `updated_ms` + `pinned` so the panel
+/// can sort + group them identically to the `/sessions` picker.
+pub(super) fn fetch_session_entries(
+    server: &str,
+    current_id: Option<&str>,
+    directory: Option<&str>,
+) -> Result<Vec<NeoismAgentSessionEntry>, String> {
+    let sessions = fetch_sessions_sorted(server, directory)?;
+    let _ = current_id;
     Ok(sessions
-        .into_iter()
-        .take(24)
-        .filter_map(|session| session_option(session, current_id))
+        .iter()
+        .filter_map(session_entry)
         .collect())
 }
 
@@ -1152,10 +1181,13 @@ fn decode_chunked_body(body: &[u8]) -> Result<Vec<u8>, String> {
     }
 }
 
-fn session_option(
+/// Build a `/sessions` picker option (title only — the date-group header
+/// carries the day; a pin marker + current-session dot render inline) paired
+/// with the raw `updated` timestamp used to bucket it under a date header.
+fn session_option_input(
     session: &Value,
     current_id: Option<&str>,
-) -> Option<NeoismAgentPickerOption> {
+) -> Option<SessionOptionInput> {
     let id = session.get("id").and_then(Value::as_str)?.to_string();
     let title = session
         .get("title")
@@ -1163,62 +1195,76 @@ fn session_option(
         .unwrap_or("Untitled")
         .to_string();
     let updated_ms = session_updated_at(session);
-    let time_label = if Some(id.as_str()) == current_id {
-        "current".to_string()
-    } else if updated_ms > 0 {
-        format_relative_time_ms(updated_ms)
-    } else {
-        "untracked".to_string()
-    };
-    // Single-line rows: title on the left, last-interacted time on the
-    // right. No model chip, no second row.
-    Some(NeoismAgentPickerOption::new(&title, "", &time_label, &id))
+    let mut option = NeoismAgentPickerOption::new(&title, "", "", &id);
+    option.is_current = Some(id.as_str()) == current_id;
+    option.pinned = session_pinned(session);
+    Some(SessionOptionInput { option, updated_ms })
 }
 
-fn format_relative_time_ms(updated_ms: u64) -> String {
-    let now_ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(updated_ms);
-    let diff_ms = now_ms.saturating_sub(updated_ms);
-    let seconds = diff_ms / 1000;
-    if seconds < 45 {
-        return "just now".to_string();
-    }
-    let minutes = seconds / 60;
-    if minutes < 2 {
-        return "1 minute ago".to_string();
-    }
-    if minutes < 60 {
-        return format!("{minutes} minutes ago");
-    }
-    let hours = minutes / 60;
-    if hours < 2 {
-        return "1 hour ago".to_string();
-    }
-    if hours < 24 {
-        return format!("{hours} hours ago");
-    }
-    let days = hours / 24;
-    if days < 2 {
-        return "yesterday".to_string();
-    }
-    if days < 30 {
-        return format!("{days} days ago");
-    }
-    let months = days / 30;
-    if months < 2 {
-        return "1 month ago".to_string();
-    }
-    if months < 12 {
-        return format!("{months} months ago");
-    }
-    let years = months / 12;
-    if years < 2 {
-        "1 year ago".to_string()
-    } else {
-        format!("{years} years ago")
-    }
+/// Flat side-panel entry for one session.
+fn session_entry(session: &Value) -> Option<NeoismAgentSessionEntry> {
+    let id = session.get("id").and_then(Value::as_str)?.to_string();
+    let title = session
+        .get("title")
+        .and_then(Value::as_str)
+        .filter(|title| !title.trim().is_empty())
+        .unwrap_or("Untitled")
+        .to_string();
+    Some(
+        NeoismAgentSessionEntry::new(id, title, "")
+            .with_updated_ms(session_updated_at(session))
+            .with_pinned(session_pinned(session)),
+    )
+}
+
+/// Whether a session JSON carries the flattened `pinned` flag.
+fn session_pinned(session: &Value) -> bool {
+    session
+        .get("pinned")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+}
+
+/// `POST /session/:id/pin` — toggle the session's pinned flag. Returns the new
+/// pinned state read back from the updated session info.
+pub(super) fn set_session_pinned(
+    server: &str,
+    session_id: &str,
+    pinned: bool,
+) -> Result<bool, String> {
+    let body = serde_json::json!({ "pinned": pinned });
+    let value = api_request_json(
+        server,
+        "POST",
+        &format!("/session/{session_id}/pin"),
+        Some(&body),
+    )?;
+    Ok(value
+        .as_ref()
+        .map(session_pinned)
+        .unwrap_or(pinned))
+}
+
+/// `DELETE /session/:id` — permanently delete a session.
+pub(super) fn delete_session(server: &str, session_id: &str) -> Result<(), String> {
+    api_request_json(server, "DELETE", &format!("/session/{session_id}"), None)?;
+    Ok(())
+}
+
+/// `PATCH /session/:id` with `{ title }` — rename a session.
+pub(super) fn rename_session(
+    server: &str,
+    session_id: &str,
+    title: &str,
+) -> Result<(), String> {
+    let body = serde_json::json!({ "title": title });
+    api_request_json(
+        server,
+        "PATCH",
+        &format!("/session/{session_id}"),
+        Some(&body),
+    )?;
+    Ok(())
 }
 
 fn session_updated_at(session: &Value) -> u64 {

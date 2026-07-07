@@ -62,8 +62,8 @@ use crate::session_queue::{
 };
 use crate::session_routes::{
     session_children, session_create, session_delete, session_diff, session_fork,
-    session_get, session_list, session_share, session_status, session_todo_list,
-    session_unshare, session_update,
+    session_get, session_list, session_set_pin, session_share, session_status,
+    session_todo_list, session_unshare, session_update,
 };
 use crate::session_undo::{
     session_redo, session_revert, session_undo, session_undo_tree, session_unrevert,
@@ -208,6 +208,7 @@ pub fn app(state: AppState) -> Router {
             "/api/session/:session_id/goal/research",
             post(session_goal_research),
         )
+        .route("/api/session/:session_id/pin", post(session_set_pin))
         .route("/api/session/:session_id/undo", get(session_undo_tree))
         .route("/api/session/:session_id/undo/tree", get(session_undo_tree))
         .route(
@@ -269,6 +270,7 @@ pub fn app(state: AppState) -> Router {
             "/session/:session_id/goal/research",
             post(session_goal_research),
         )
+        .route("/session/:session_id/pin", post(session_set_pin))
         .route("/session/:session_id/undo", get(session_undo_tree))
         .route("/session/:session_id/undo/tree", get(session_undo_tree))
         .route("/session/:session_id/summarize", post(session_summarize))

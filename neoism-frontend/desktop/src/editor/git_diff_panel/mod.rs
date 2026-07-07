@@ -37,6 +37,26 @@ impl GitDiffIo for NativeGitDiffIo {
     fn collect_files(&self, repo_root: &Path) -> Vec<FileChange> {
         io::collect_files(repo_root)
     }
+
+    fn stage(&self, repo_root: &Path, path: &str) -> Result<(), String> {
+        io::stage(repo_root, path)
+    }
+
+    fn unstage(&self, repo_root: &Path, path: &str) -> Result<(), String> {
+        io::unstage(repo_root, path)
+    }
+
+    fn commit(&self, repo_root: &Path, message: &str) -> Result<(), String> {
+        io::commit(repo_root, message)
+    }
+
+    fn list_branches(&self, repo_root: &Path) -> Vec<String> {
+        io::list_branches(repo_root)
+    }
+
+    fn checkout(&self, repo_root: &Path, branch: &str) -> Result<(), String> {
+        io::checkout(repo_root, branch)
+    }
 }
 
 /// Install the native IO provider on a freshly-constructed panel.

@@ -299,6 +299,10 @@ impl Screen<'_> {
         let mut snap_cursor = false;
         let mut open_block_menu = false;
         let mut open_block_menu_at = None;
+        // `Some(reverse)` when `/`/`?` asked to open the shared command-
+        // palette Search modal for this markdown pane (acted on after the
+        // pane borrow ends, since opening the palette needs `self`).
+        let mut open_markdown_search: Option<bool> = None;
         let mut arm_markdown_leader = false;
         let mut flushed_markdown_leader = false;
         let mut yank_message = None;
@@ -608,6 +612,17 @@ impl Screen<'_> {
                     Key::Named(NamedKey::Space) => {
                         arm_markdown_leader = true;
                     }
+                    // `/` and `?` open the SAME command-palette Search modal
+                    // the code editor uses; snapshot the origin here (so Esc
+                    // restores it) and open the palette after the borrow ends.
+                    Key::Character(ch) if plain && ch == "/" => {
+                        markdown.search_begin(false);
+                        open_markdown_search = Some(false);
+                    }
+                    Key::Character(ch) if plain && ch == "?" => {
+                        markdown.search_begin(true);
+                        open_markdown_search = Some(true);
+                    }
                     Key::Character(ch) if plain && ch.chars().count() == 1 => {
                         let ch = ch.chars().next().unwrap_or_default();
                         let feed = markdown.vim.feed(ch, false);
@@ -663,6 +678,19 @@ impl Screen<'_> {
                     _ => handled = false,
                 },
             }
+        }
+
+        if let Some(reverse) = open_markdown_search {
+            // Open the shared palette in Search mode; from here the flow is
+            // identical to the code editor's `/`, except the host sources
+            // matches from the markdown buffer (see dispatch_palette_search_query).
+            if reverse {
+                self.renderer.command_palette.enter_search_mode_backward();
+            } else {
+                self.renderer.command_palette.enter_search_mode();
+            }
+            self.mark_dirty();
+            return;
         }
 
         if open_block_menu {

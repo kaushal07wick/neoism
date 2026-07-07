@@ -639,6 +639,22 @@ fn draw_heading(
         clip_top,
         clip_bottom,
     );
+    draw_search_matches_for_line(
+        sugarloaf,
+        pane,
+        item.first_line,
+        raw,
+        x,
+        text_y,
+        marker_len,
+        line_height(&opts),
+        width,
+        &opts,
+        theme,
+        clip,
+        clip_top,
+        clip_bottom,
+    );
     draw_inline_wrapped_lines(
         sugarloaf,
         pane,
@@ -1057,6 +1073,22 @@ fn draw_markdown_line(
                 clip_top,
                 clip_bottom,
             );
+            draw_search_matches_for_line(
+                sugarloaf,
+                pane,
+                line_ix,
+                text,
+                x,
+                text_y,
+                0,
+                code_h,
+                width,
+                &code_opts,
+                theme,
+                clip,
+                clip_top,
+                clip_bottom,
+            );
             if code_fence {
                 // Hide the raw ``` fence: the opening fence shows the language
                 // label like the git-diff card header; the closing fence is blank.
@@ -1154,6 +1186,22 @@ fn draw_markdown_line(
                 (marker_len, heading_text)
             };
             draw_selection_for_line(
+                sugarloaf,
+                pane,
+                line_ix,
+                text,
+                x,
+                text_y,
+                marker_len,
+                heading_h,
+                width,
+                &heading_opts,
+                theme,
+                clip,
+                clip_top,
+                clip_bottom,
+            );
+            draw_search_matches_for_line(
                 sugarloaf,
                 pane,
                 line_ix,
@@ -1354,6 +1402,22 @@ fn draw_markdown_line(
             None,
         );
         draw_selection_for_line(
+            sugarloaf,
+            pane,
+            line_ix,
+            text,
+            text_x,
+            text_y,
+            marker_len,
+            line_h,
+            body_width,
+            &line_opts,
+            theme,
+            clip,
+            clip_top,
+            clip_bottom,
+        );
+        draw_search_matches_for_line(
             sugarloaf,
             pane,
             line_ix,

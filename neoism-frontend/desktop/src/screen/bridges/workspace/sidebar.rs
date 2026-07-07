@@ -215,43 +215,98 @@ impl Screen<'_> {
             self.renderer.notes_sidebar.select_selector();
             return true;
         }
+        // Ctrl+D / Ctrl+U — vim half-page jumps. Consuming them here is
+        // what keeps Ctrl+D from falling through to the terminal behind
+        // the panel as an EOF (`^D`), which closes the shell and takes
+        // the window down with it. Mirrors the file tree's guard.
+        if mods.control_key() && !mods.alt_key() && !mods.super_key() {
+            if let Key::Character(s) = &key.logical_key {
+                match s.as_str() {
+                    "d" => {
+                        self.renderer.notes_sidebar.select_half_page_down();
+                        return true;
+                    }
+                    "u" => {
+                        self.renderer.notes_sidebar.select_half_page_up();
+                        return true;
+                    }
+                    _ => {}
+                }
+            }
+        }
         if mods.alt_key() || mods.control_key() || mods.super_key() {
             return false;
         }
         match &key.logical_key {
+            // Numeric count prefix (`5j`, `12G`). Accumulated into the
+            // sidebar's pending count, consumed by the next motion.
+            Key::Character(s)
+                if !s.is_empty() && s.chars().all(|c| c.is_ascii_digit()) =>
+            {
+                for c in s.chars() {
+                    if let Some(d) = c.to_digit(10) {
+                        self.renderer.notes_sidebar.push_count_digit(d);
+                    }
+                }
+                true
+            }
+            // `gg` jumps to the top (a lone `g` arms the pair).
+            Key::Character(s) if s == "g" => {
+                if self.renderer.notes_sidebar.note_g() {
+                    self.renderer.notes_sidebar.select_first();
+                }
+                true
+            }
+            // `G` / `$` jump to the bottom; `<count>G` jumps to that row.
+            Key::Character(s) if s == "G" => {
+                match self.renderer.notes_sidebar.pending_count() {
+                    Some(n) => self.renderer.notes_sidebar.goto_row(n),
+                    None => self.renderer.notes_sidebar.select_last(),
+                }
+                true
+            }
+            Key::Character(s) if s == "$" => {
+                self.renderer.notes_sidebar.select_last();
+                true
+            }
             Key::Character(s) if s == "j" => {
-                self.renderer.notes_sidebar.select_next();
+                self.notes_sidebar_move(true);
                 true
             }
             Key::Character(s) if s == "k" => {
-                self.renderer.notes_sidebar.select_prev();
+                self.notes_sidebar_move(false);
                 true
             }
             Key::Character(s) if s == "a" => {
+                self.renderer.notes_sidebar.clear_pending();
                 if let Some(dir) = self.notes_sidebar_target_dir() {
                     self.open_notes_new_file_prompt(dir);
                 }
                 true
             }
             Key::Character(s) if s == "f" => {
+                self.renderer.notes_sidebar.clear_pending();
                 if let Some(dir) = self.notes_sidebar_target_dir() {
                     self.open_file_tree_new_folder_prompt(dir);
                 }
                 true
             }
             Key::Character(s) if s == "r" => {
+                self.renderer.notes_sidebar.clear_pending();
                 if let Some(path) = self.renderer.notes_sidebar.selected_note_path() {
                     self.open_file_tree_rename_prompt(path);
                 }
                 true
             }
             Key::Character(s) if s == "d" => {
+                self.renderer.notes_sidebar.clear_pending();
                 if let Some(path) = self.renderer.notes_sidebar.selected_note_path() {
                     self.confirm_delete_file_tree_path(path);
                 }
                 true
             }
             Key::Character(s) if s == "m" || s == " " => {
+                self.renderer.notes_sidebar.clear_pending();
                 if self.renderer.notes_sidebar.is_selector_selected() {
                     self.open_notes_vault_menu_for_selector();
                 } else {
@@ -260,24 +315,27 @@ impl Screen<'_> {
                 true
             }
             Key::Named(NamedKey::ArrowDown) => {
-                self.renderer.notes_sidebar.select_next();
+                self.notes_sidebar_move(true);
                 true
             }
             Key::Named(NamedKey::ArrowUp) => {
-                self.renderer.notes_sidebar.select_prev();
+                self.notes_sidebar_move(false);
                 true
             }
             // Vault selector → share icon → ⋮ menu caret walk. Consumed
             // either way so plain arrows never leak past the panel.
             Key::Named(NamedKey::ArrowRight) => {
+                self.renderer.notes_sidebar.clear_pending();
                 let _ = self.renderer.notes_sidebar.move_horizontal_focus(true);
                 true
             }
             Key::Named(NamedKey::ArrowLeft) => {
+                self.renderer.notes_sidebar.clear_pending();
                 let _ = self.renderer.notes_sidebar.move_horizontal_focus(false);
                 true
             }
             Key::Named(NamedKey::Enter) => {
+                self.renderer.notes_sidebar.clear_pending();
                 use neoism_ui::panels::notes_sidebar::NotesHeaderAction;
                 match self.renderer.notes_sidebar.selected_header_action() {
                     Some(NotesHeaderAction::Visualize) => {
@@ -313,6 +371,31 @@ impl Screen<'_> {
                 true
             }
             _ => false,
+        }
+    }
+
+    /// Move the notes selection one motion (`j`/`k`/arrows). Honours a
+    /// pending vim count: `5j` steps five rows (clamped), while a plain
+    /// `j` keeps the single-step behaviour that also walks onto the vault
+    /// selector past the last row.
+    fn notes_sidebar_move(&mut self, down: bool) {
+        match self.renderer.notes_sidebar.pending_count() {
+            Some(_) => {
+                let n = self.renderer.notes_sidebar.take_count();
+                if down {
+                    self.renderer.notes_sidebar.select_next_by(n);
+                } else {
+                    self.renderer.notes_sidebar.select_prev_by(n);
+                }
+            }
+            None => {
+                self.renderer.notes_sidebar.take_count();
+                if down {
+                    self.renderer.notes_sidebar.select_next();
+                } else {
+                    self.renderer.notes_sidebar.select_prev();
+                }
+            }
         }
     }
 

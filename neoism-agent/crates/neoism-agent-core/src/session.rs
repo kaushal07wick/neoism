@@ -589,6 +589,14 @@ pub struct GoalResearchNote {
 /// Key under which a [`SessionGoal`] is stored in [`SessionInfo::extra`].
 pub const SESSION_GOAL_KEY: &str = "goal";
 
+/// Key under which the "pinned" flag is stored in [`SessionInfo::extra`].
+///
+/// Mirrors the [`SESSION_GOAL_KEY`] pattern: a migration-free boolean kept in
+/// the flattened `extra` map so it serializes into the session's `info_json`
+/// and appears as a top-level `pinned` field on the session JSON (which the
+/// pickers / side panel read to float pinned sessions to the top).
+pub const SESSION_PINNED_KEY: &str = "pinned";
+
 impl SessionInfo {
     /// Returns the persisted goal for this session, if any.
     pub fn goal(&self) -> Option<SessionGoal> {
@@ -607,6 +615,25 @@ impl SessionInfo {
     /// Removes any persisted goal for this session.
     pub fn clear_goal(&mut self) {
         self.extra.remove(SESSION_GOAL_KEY);
+    }
+
+    /// Whether this session is pinned to the top of the session list.
+    pub fn pinned(&self) -> bool {
+        self.extra
+            .get(SESSION_PINNED_KEY)
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+    }
+
+    /// Sets (or, when `false`, clears) the pinned flag. Clearing removes the
+    /// key entirely so unpinned sessions carry no residual `extra` entry.
+    pub fn set_pinned(&mut self, pinned: bool) {
+        if pinned {
+            self.extra
+                .insert(SESSION_PINNED_KEY.to_string(), Value::Bool(true));
+        } else {
+            self.extra.remove(SESSION_PINNED_KEY);
+        }
     }
 }
 

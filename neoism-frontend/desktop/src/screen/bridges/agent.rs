@@ -46,6 +46,79 @@ impl Screen<'_> {
             return self.paste_into_neoism_agent(clipboard);
         }
 
+        // Session picker: inline-rename editing + pin/delete/rename shortcuts.
+        // Handled ahead of the ctrl+d history-scroll binding below so ctrl+d
+        // deletes the selected session while the picker is open.
+        if self
+            .context_manager
+            .current()
+            .neoism_agent
+            .as_ref()
+            .is_some_and(|agent| agent.session_picker_open())
+        {
+            let agent = self
+                .context_manager
+                .current_mut()
+                .neoism_agent
+                .as_mut()
+                .expect("Neoism agent pane exists");
+            if agent.session_rename_active() {
+                match key.logical_key.as_ref() {
+                    Key::Named(NamedKey::Enter) => {
+                        agent.commit_session_rename();
+                    }
+                    Key::Named(NamedKey::Escape) => {
+                        agent.cancel_session_rename();
+                    }
+                    Key::Named(NamedKey::Backspace) => {
+                        agent.backspace_session_rename();
+                    }
+                    _ => {
+                        if !mods.control_key()
+                            && !mods.alt_key()
+                            && !mods.super_key()
+                        {
+                            let text = Self::text_for_key_event(key).to_string();
+                            if !text.is_empty()
+                                && !text.chars().any(|ch| ch.is_control())
+                            {
+                                agent.push_session_rename(&text);
+                            }
+                        }
+                    }
+                }
+                self.mark_dirty();
+                return true;
+            }
+            if mods.control_key()
+                && !mods.alt_key()
+                && !mods.super_key()
+                && !mods.shift_key()
+            {
+                if let Key::Character(ch) = key.key_without_modifiers().as_ref() {
+                    let handled = match ch.to_ascii_lowercase().as_str() {
+                        "f" => {
+                            agent.toggle_selected_session_pin();
+                            true
+                        }
+                        "d" => {
+                            agent.delete_selected_session();
+                            true
+                        }
+                        "r" => {
+                            agent.begin_selected_session_rename();
+                            true
+                        }
+                        _ => false,
+                    };
+                    if handled {
+                        self.mark_dirty();
+                        return true;
+                    }
+                }
+            }
+        }
+
         if mods.control_key() && !mods.alt_key() && !mods.super_key() && !mods.shift_key()
         {
             let modifierless = key.key_without_modifiers();
@@ -128,12 +201,30 @@ impl Screen<'_> {
                     return true;
                 }
                 Key::Named(NamedKey::Escape) => {
-                    agent.side_panel_mut().set_focused(false);
+                    // Esc clears an active search filter first, else releases
+                    // focus back to the agent body.
+                    if agent.side_panel().session_query().is_empty() {
+                        agent.side_panel_mut().set_focused(false);
+                    } else {
+                        agent.side_panel_mut().clear_session_query();
+                    }
                     self.mark_dirty();
                     return true;
                 }
-                // Plain typing / other keys still get swallowed so they
-                // never leak into the input box behind the panel.
+                Key::Named(NamedKey::Backspace) => {
+                    agent.side_panel_mut().backspace_session_query();
+                    self.mark_dirty();
+                    return true;
+                }
+                // Typed characters filter the session list (home-mode search).
+                Key::Character(text) => {
+                    let text = text.to_string();
+                    agent.side_panel_mut().push_session_query(&text);
+                    self.mark_dirty();
+                    return true;
+                }
+                // Other keys still get swallowed so they never leak into the
+                // input box behind the panel.
                 _ => return true,
             }
         }
@@ -901,21 +992,30 @@ impl Screen<'_> {
             self.context_manager.current_mut().neoism_agent.as_mut()
         {
             if agent.side_panel().contains_point(mx, my) {
-                agent.side_panel_mut().set_focused(true);
-                let panel_rect = agent.side_panel().last_panel_rect();
-                if let Some(rect) = panel_rect {
-                    if let Some(row) = agent.side_panel().hit_test_row(mx, my, rect) {
-                        agent.side_panel_mut().set_selected(row);
-                        let activated = if agent.has_conversation() {
-                            agent.activate_side_panel_subagent()
-                        } else {
-                            agent.activate_side_panel_selection()
-                        };
-                        if activated {
-                            // Hand keyboard focus back to the input bar
-                            // — the user just picked a session, they
-                            // want to type, not keep navigating rows.
-                            agent.side_panel_mut().set_focused(false);
+                // The "Directory" header is a dropdown affordance — open the
+                // working-directory picker (over the composer) instead of
+                // treating the click as a session/branch row selection.
+                if agent.side_panel().directory_hit_contains(mx, my) {
+                    agent.open_directory_picker();
+                    agent.side_panel_mut().set_focused(false);
+                } else {
+                    agent.side_panel_mut().set_focused(true);
+                    let panel_rect = agent.side_panel().last_panel_rect();
+                    if let Some(rect) = panel_rect {
+                        if let Some(row) = agent.side_panel().hit_test_row(mx, my, rect)
+                        {
+                            agent.side_panel_mut().set_selected(row);
+                            let activated = if agent.has_conversation() {
+                                agent.activate_side_panel_subagent()
+                            } else {
+                                agent.activate_side_panel_selection()
+                            };
+                            if activated {
+                                // Hand keyboard focus back to the input bar
+                                // — the user just picked a session, they
+                                // want to type, not keep navigating rows.
+                                agent.side_panel_mut().set_focused(false);
+                            }
                         }
                     }
                 }

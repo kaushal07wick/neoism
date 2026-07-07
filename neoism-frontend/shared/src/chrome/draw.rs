@@ -590,7 +590,6 @@ impl<A: Send + Copy + 'static> Chrome<A> {
                 &ctx,
             );
         }
-
         // TrailCursor drive: mirror the native priority chain from
         // `frontends/neoism/src/screen/render/mod.rs` (lines 1034-1257)
         // so a single cursor glides between surfaces in the same

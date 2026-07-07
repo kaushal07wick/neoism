@@ -288,6 +288,10 @@ fn draw_inline_wrapped_lines(
     for (visual_ix, line) in lines.iter().enumerate() {
         let line_y = y + visual_ix as f32 * line_h;
         let mut run_x = x + line.x_offset + if visual_ix > 0 { hang_px } else { 0.0 };
+        // Link target of the last-drawn run, so a link that spans several
+        // words underlines the inter-word gaps too — one continuous
+        // underline instead of one dash per word.
+        let mut prev_link_target: Option<&str> = None;
         for (word_ix, word) in line.words.iter().enumerate() {
             let lead_ws = if word_ix == 0 {
                 word.lead_ws
@@ -295,7 +299,33 @@ fn draw_inline_wrapped_lines(
                 word.lead_ws.max(1)
             };
             if lead_ws > 0 {
-                run_x += space_w * lead_ws as f32;
+                let gap = space_w * lead_ws as f32;
+                // When the same link spans this word gap, underline the
+                // gap so the link reads as one continuous underline.
+                let word_link = word
+                    .runs
+                    .iter()
+                    .find(|r| !r.text.is_empty())
+                    .and_then(|r| match &r.style {
+                        InlineRunStyle::Link(inner) => Some(inner.as_str()),
+                        _ => None,
+                    });
+                if let (Some(prev), Some(cur)) = (prev_link_target, word_link) {
+                    if prev == cur {
+                        draw_rect_clipped(
+                            sugarloaf,
+                            clip,
+                            run_x,
+                            line_y + line_h - 3.0,
+                            gap,
+                            1.4,
+                            theme.f32_alpha(theme.blue, 0.92),
+                            DEPTH,
+                            ORDER_TEXT + 1,
+                        );
+                    }
+                }
+                run_x += gap;
             }
             for run in &word.runs {
                 if run.text.is_empty() {
@@ -420,6 +450,10 @@ fn draw_inline_wrapped_lines(
                     | InlineRunStyle::Illuminated(_) => {}
                 }
                 run_x += run_w;
+                prev_link_target = match &run.style {
+                    InlineRunStyle::Link(inner) => Some(inner.as_str()),
+                    _ => None,
+                };
             }
         }
     }

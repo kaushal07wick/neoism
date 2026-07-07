@@ -6,9 +6,12 @@ use crate::primitives::IdeTheme;
 const DEPTH: f32 = 0.0;
 const ORDER: u8 = 180;
 const ROW_H: f32 = 34.0;
-const TITLE_H: f32 = 30.0;
+const TITLE_H: f32 = 54.0;
 const MAX_ROWS: usize = 8;
 const RADIUS: f32 = 14.0;
+/// Height (pre-scale) of the muted hint band drawn under the list when a
+/// picker supplies a `footer_hint` (the `/sessions` picker's key legend).
+pub const FOOTER_H: f32 = 26.0;
 
 #[derive(Clone, Copy)]
 pub struct InlinePickerRow<'a> {
@@ -19,6 +22,9 @@ pub struct InlinePickerRow<'a> {
     /// Draw a filled accent-colored dot on the left to mark the currently
     /// active item (e.g. the session the user is presently inside).
     pub is_current: bool,
+    /// Draw a small pin glyph on the right of the row to mark a pinned
+    /// session.
+    pub is_pinned: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -30,12 +36,25 @@ pub struct InlinePickerView<'a> {
     pub list_scroll_offset: f32,
     pub cursor_offset: f32,
     pub rows: &'a [InlinePickerRow<'a>],
+    /// Muted key-legend band drawn under the list (e.g. the `/sessions`
+    /// picker's `pin/unpin ctrl+f …`). `None` leaves the card list-only.
+    pub footer_hint: Option<&'a str>,
+    /// In-progress rename buffer. When `Some`, the search row is replaced
+    /// with an inline `Rename › <buffer>` editor instead of the filter text.
+    pub rename: Option<&'a str>,
+    /// Whether to draw the blinking search caret. Off for pickers whose live
+    /// input is the composer (slash / @file / skill mentions) — the composer
+    /// already shows a caret there, so a second one in the search row reads
+    /// as a doubled/misplaced cursor.
+    pub show_search_caret: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct InlinePickerRenderState {
     pub rect: [f32; 4],
     pub selected_cursor_rect: Option<[f32; 4]>,
+    /// Device-pixel height of the footer band (0 when absent).
+    pub footer_h: f32,
 }
 
 /// Trim `text` with an ellipsis so its measured width is ≤ `max_w`.
@@ -60,19 +79,23 @@ fn truncate_to_pixel_width(
     ellipsis.to_string()
 }
 
-pub fn layout(row_count: usize, input_rect: [f32; 4], scale: f32) -> Option<[f32; 4]> {
-    if row_count == 0 {
-        return None;
-    }
-
+pub fn layout(
+    row_count: usize,
+    input_rect: [f32; 4],
+    scale: f32,
+    has_footer: bool,
+) -> Option<[f32; 4]> {
     let s = scale.clamp(0.5, 3.0);
     let row_h = ROW_H * s;
     let title_h = TITLE_H * s;
+    let footer_h = if has_footer { FOOTER_H * s } else { 0.0 };
+    // An empty picker still shows one row ("No results") and stays open, so
+    // a filter that matches nothing doesn't make the modal vanish.
     let visible_rows = row_count.min(MAX_ROWS).max(1);
     // Lock to the composer's width and x position so the popover lines up
     // edge-to-edge with the input chrome.
     let width = input_rect[2];
-    let height = title_h + visible_rows as f32 * row_h;
+    let height = title_h + visible_rows as f32 * row_h + footer_h;
     let x = input_rect[0];
     let y = (input_rect[1] - height - 6.0 * s).max(8.0 * s);
     Some([x, y, width, height])
@@ -88,7 +111,9 @@ pub fn render(
     let s = scale.clamp(0.5, 3.0);
     let row_h = ROW_H * s;
     let title_h = TITLE_H * s;
-    let [x, y, width, height] = layout(view.rows.len(), input_rect, scale)?;
+    let has_footer = view.footer_hint.is_some();
+    let footer_h = if has_footer { FOOTER_H * s } else { 0.0 };
+    let [x, y, width, height] = layout(view.rows.len(), input_rect, scale, has_footer)?;
     let visible_rows = view.rows.len().min(MAX_ROWS).max(1);
     let selected = view.selected.min(view.rows.len().saturating_sub(1));
     let first = view
@@ -96,17 +121,10 @@ pub fn render(
         .min(view.rows.len().saturating_sub(visible_rows));
     let header_clip = [x, y, width, title_h];
 
-    sugarloaf.rect(
-        None,
-        x,
-        y,
-        width,
-        height,
-        theme.f32(theme.black),
-        DEPTH,
-        ORDER,
-    );
-
+    // NB: no square backing rect here — a full-bounds `rect` would fill
+    // the four corner triangles the rounded rects leave empty, showing as
+    // black square corners poking past the rounded ones on themes where
+    // `black != bg`. The rounded fills below are the whole container.
     sugarloaf.rounded_rect(
         None,
         x,
@@ -141,23 +159,102 @@ pub fn render(
         ORDER + 2,
     );
 
-    let title = if view.query.is_empty() {
-        view.title.to_string()
-    } else {
-        format!("{}  /{}", view.title, view.query)
-    };
+    // Header band: modal title (left) + `esc` hint (right), then a search
+    // row below showing the live query or a muted "Search" placeholder.
+    // Type-to-filter is always on; this just gives it a visible input.
     sugarloaf.text_mut().draw(
         x + 14.0 * s,
-        y + 8.0 * s,
-        &title,
+        y + 9.0 * s,
+        view.title,
         &DrawOpts {
-            font_size: 12.0 * s,
-            color: theme.u8(theme.muted),
+            font_size: 13.0 * s,
+            color: theme.u8(theme.fg),
             bold: true,
             clip_rect: Some(header_clip),
             ..DrawOpts::default()
         },
     );
+    let esc_opts = DrawOpts {
+        font_size: 12.0 * s,
+        color: theme.u8(theme.muted),
+        clip_rect: Some(header_clip),
+        ..DrawOpts::default()
+    };
+    let esc_w = sugarloaf.text_mut().measure("esc", &esc_opts);
+    sugarloaf
+        .text_mut()
+        .draw(x + width - 14.0 * s - esc_w, y + 9.0 * s, "esc", &esc_opts);
+    if let Some(rename) = view.rename {
+        // Inline rename editor takes over the search row: an accent label
+        // plus the live buffer with a trailing caret block.
+        let label_opts = DrawOpts {
+            font_size: 13.0 * s,
+            color: theme.u8(theme.cyan),
+            bold: true,
+            clip_rect: Some(header_clip),
+            ..DrawOpts::default()
+        };
+        sugarloaf
+            .text_mut()
+            .draw(x + 14.0 * s, y + 31.0 * s, "Rename ›", &label_opts);
+        let label_w = sugarloaf.text_mut().measure("Rename › ", &label_opts);
+        let buffer = format!("{rename}▏");
+        sugarloaf.text_mut().draw(
+            x + 14.0 * s + label_w,
+            y + 31.0 * s,
+            &buffer,
+            &DrawOpts {
+                font_size: 13.0 * s,
+                color: theme.u8(theme.fg),
+                clip_rect: Some(header_clip),
+                ..DrawOpts::default()
+            },
+        );
+    } else {
+        let search_opts = DrawOpts {
+            font_size: 13.0 * s,
+            color: theme.u8(theme.fg),
+            clip_rect: Some(header_clip),
+            ..DrawOpts::default()
+        };
+        // Caret sits after the typed query, or at the field start (with the
+        // muted placeholder pushed right) when empty — reads as a live input.
+        let caret_x = if view.query.is_empty() {
+            sugarloaf.text_mut().draw(
+                x + 14.0 * s + 5.0 * s,
+                y + 31.0 * s,
+                "Search",
+                &DrawOpts {
+                    color: theme.u8(theme.muted),
+                    ..search_opts
+                },
+            );
+            x + 14.0 * s
+        } else {
+            sugarloaf
+                .text_mut()
+                .draw(x + 14.0 * s, y + 31.0 * s, view.query, &search_opts);
+            x + 14.0 * s + sugarloaf.text_mut().measure(view.query, &search_opts)
+        };
+        if view.show_search_caret {
+            // Caret sits ON the search line (same Y as the query/placeholder
+            // text at `y + 31*s`), a short bar ~ the search font size — NOT a
+            // tall bar floating up into the title row. `caret_x` already
+            // tracks the measured query width, so it advances as you type.
+            let caret_w = (1.5 * s).max(1.0);
+            sugarloaf.rounded_rect(
+                None,
+                caret_x + 1.0 * s,
+                y + 31.0 * s,
+                caret_w,
+                13.0 * s,
+                theme.f32(theme.accent),
+                DEPTH,
+                0.0,
+                ORDER + 3,
+            );
+        }
+    }
 
     let list_y = y + title_h;
     let list_clip = [x, list_y, width, visible_rows as f32 * row_h];
@@ -267,21 +364,26 @@ pub fn render(
         }
         // Current-session dot — small filled circle in accent color,
         // left-aligned in the 22 px gutter, independent of selection.
+        // Rects/quads aren't bounded by the text `clip_rect`, so cull the
+        // dot when its row is sliced at the list edges — otherwise it bleeds
+        // past the modal's top/bottom rounded corners as the row scrolls out.
         if row.is_current {
             let dot_d = 6.0 * s;
             let dot_x = x + 7.0 * s;
             let dot_y = row_y + (row_h - dot_d) / 2.0;
-            sugarloaf.rounded_rect(
-                None,
-                dot_x,
-                dot_y,
-                dot_d,
-                dot_d,
-                theme.f32(theme.accent),
-                DEPTH,
-                dot_d / 2.0,
-                ORDER + 5,
-            );
+            if dot_y >= list_y && dot_y + dot_d <= list_bottom {
+                sugarloaf.rounded_rect(
+                    None,
+                    dot_x,
+                    dot_y,
+                    dot_d,
+                    dot_d,
+                    theme.f32(theme.accent),
+                    DEPTH,
+                    dot_d / 2.0,
+                    ORDER + 5,
+                );
+            }
         }
         let title_x = x + 22.0 * s;
         let footer_w = if row.footer.is_empty() {
@@ -318,9 +420,87 @@ pub fn render(
                 &footer_opts,
             );
         }
+        // Pinned marker — a small cyan dot in the row's right padding,
+        // clear of the right-aligned time text. Culled at the list edges
+        // for the same reason as the current-session dot above.
+        if row.is_pinned {
+            let dot_d = 6.0 * s;
+            let dot_x = x + width - dot_d - 8.0 * s;
+            let dot_y = row_y + (row_h - dot_d) / 2.0;
+            if dot_y >= list_y && dot_y + dot_d <= list_bottom {
+                sugarloaf.rounded_rect(
+                    None,
+                    dot_x,
+                    dot_y,
+                    dot_d,
+                    dot_d,
+                    theme.f32(theme.cyan),
+                    DEPTH,
+                    dot_d / 2.0,
+                    ORDER + 5,
+                );
+            }
+        }
+    }
+    // Empty state — keep the modal open and legible instead of collapsing
+    // to nothing when a filter (or an empty catalog) yields no rows.
+    if view.rows.is_empty() {
+        sugarloaf.text_mut().draw(
+            x + 22.0 * s,
+            list_y + (row_h - 14.0 * s) / 2.0 + 7.0 * s,
+            "No results",
+            &DrawOpts {
+                font_size: 13.0 * s,
+                color: theme.u8(theme.muted),
+                clip_rect: Some(list_clip),
+                ..DrawOpts::default()
+            },
+        );
+    }
+    // Footer hint band: a muted key legend under the list, split off by a
+    // thin separator. Only the `/sessions` picker supplies one.
+    if let Some(hint) = view.footer_hint {
+        let band_y = list_bottom;
+        // Opaque band with rounded bottom corners matching the card, drawn
+        // ABOVE the row highlights (ORDER+3..5) so the selected-row accent
+        // can't phase through the legend. Reuses the per-corner-radii quad.
+        sugarloaf.quad(
+            None,
+            x + s,
+            band_y,
+            (width - 2.0 * s).max(0.0),
+            (footer_h - s).max(0.0),
+            theme.f32(theme.bg),
+            [0.0, 0.0, (RADIUS - 1.0) * s, (RADIUS - 1.0) * s],
+            DEPTH,
+            ORDER + 6,
+        );
+        sugarloaf.rect(
+            None,
+            x + s,
+            band_y,
+            (width - 2.0 * s).max(0.0),
+            (1.0 * s).max(1.0),
+            theme.f32(theme.border),
+            DEPTH,
+            ORDER + 7,
+        );
+        let footer_hint_opts = DrawOpts {
+            font_size: 11.0 * s,
+            color: theme.u8(theme.muted),
+            clip_rect: Some([x, band_y, width, footer_h]),
+            ..DrawOpts::default()
+        };
+        sugarloaf.text_mut().draw(
+            x + 14.0 * s,
+            band_y + (footer_h - 11.0 * s) / 2.0,
+            hint,
+            &footer_hint_opts,
+        );
     }
     Some(InlinePickerRenderState {
         rect: [x, y, width, height],
         selected_cursor_rect,
+        footer_h,
     })
 }

@@ -301,7 +301,23 @@ impl Screen<'_> {
         let scale_factor = self.sugarloaf.scale_factor();
         let margins = self.workspace_chrome_margins();
         for context_grid in self.context_manager.contexts_mut() {
-            let new_top = if context_grid.current().editor.is_some() {
+            // Markdown / notebook / draw panes carry the same buffer-tabs +
+            // breadcrumbs chrome as an nvim editor, so they must reserve
+            // `editor_top` too. Keying only on `editor.is_some()` here (the
+            // other two margin paths — `apply_config` and
+            // `reapply_chrome_layout` — use the full check) handed those
+            // panes `terminal_top` on a zoom step, sliding their content up
+            // under the breadcrumb; the pane's text then painted over the
+            // breadcrumb's opaque backing in the late text pass, so the
+            // strip read as translucent until the next layout pass.
+            let reserves_editor_chrome = {
+                let current = context_grid.current();
+                current.editor.is_some()
+                    || current.markdown.is_some()
+                    || current.notebook.is_some()
+                    || current.draw.is_some()
+            };
+            let new_top = if reserves_editor_chrome {
                 margins.editor_top
             } else {
                 margins.terminal_top

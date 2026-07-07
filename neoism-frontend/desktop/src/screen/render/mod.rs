@@ -334,6 +334,16 @@ impl Screen<'_> {
         let window_id = self.context_manager.window_id();
         crate::app::freeze_watchdog::mark_render_stage(window_id, "screen.render.enter");
 
+        // First-run only: auto-open the notes sidebar with `Welcome/`
+        // expanded (no note opened, focus left on the splash/terminal).
+        // Runs on the first render tick — panes + workspace are wired by
+        // now, unlike inside `Screen::new`'s inline struct return. The
+        // method itself is further gated by the on-disk marker and deletes
+        // it, so this only ever does work once per fresh install.
+        if std::mem::take(&mut self.welcome_reveal_pending) {
+            self.reveal_welcome_notes_first_run();
+        }
+
         // Surface any background reMarkable auto-sync results (no-op unless
         // the optional `remarkable` extension is compiled in).
         self.poll_remarkable_autosync();

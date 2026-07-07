@@ -9,6 +9,16 @@
 -- and moves with nvim's own search function so post-commit `n` /
 -- `N` / `hlsearch` behave as usual.
 --
+-- Incsearch semantics (matches nvim's native `/`):
+--   * `begin` snapshots the pre-search view so Esc/cancel can restore
+--     the cursor + scroll exactly where the user was.
+--   * `search` orders results so the FIRST (auto-selected) row is the
+--     nearest match at/after the cursor, wrapping to the top — the same
+--     "jump forward from here" feel as typing `/pat` natively.
+--   * `preview` moves + centers the view on the previewed match AND
+--     lights up every occurrence live (`hlsearch`), so the buffer
+--     behind the popup updates on every keystroke.
+--
 -- All entry points are designed to be called via `nvim_command(lua
 -- ...)` from the rust side — no rpcrequest round-trip — so latency
 -- stays bounded by the regular nvim_command pipe.
@@ -24,6 +34,10 @@ local NS = vim.api.nvim_create_namespace("rio_search_preview")
 -- line buffer doesn't ship 30k entries through the rpc channel.
 -- The palette only displays a window anyway.
 local MAX_MATCHES = 1000
+
+-- Pre-search view snapshot (cursor + scroll), captured when a `/`
+-- session opens. `winsaveview()` restores pixel-for-pixel on cancel.
+M._origin = nil
 
 local function search_ignores_case(query)
   if not vim.o.ignorecase then
@@ -58,9 +72,76 @@ local function display_line(s)
   return s
 end
 
+-- Snapshot the current view so cancel can restore it. Called from rust
+-- the instant the `/` palette opens (before the user types anything),
+-- so the anchor is the true pre-search position.
+function M.begin()
+  local buf = vim.api.nvim_get_current_buf()
+  if not vim.api.nvim_buf_is_valid(buf) then
+    M._origin = nil
+    return
+  end
+  local ok, view = pcall(vim.fn.winsaveview)
+  M._origin = (ok and view) or nil
+end
+
+-- Lazily snapshot the origin if `begin` was never called (defensive —
+-- keeps Esc-restore working even if the palette was opened by a path
+-- that didn't fire `begin`).
+local function ensure_origin()
+  if M._origin == nil then
+    M.begin()
+  end
+end
+
+-- Restore the pre-search view captured by `begin`, if any.
+local function restore_origin()
+  if M._origin then
+    pcall(vim.fn.winrestview, M._origin)
+  end
+end
+
+-- Rotate the file-ordered match list so the first entry is the nearest
+-- match at/after the origin cursor, wrapping around to the top when
+-- every match sits before it. This makes the auto-selected row 0 (which
+-- rust previews) land on the "next" match — nvim's forward-search feel —
+-- instead of always snapping to the first match in the file.
+local function rotate_to_nearest(matches, origin)
+  if not origin or #matches <= 1 then
+    return matches
+  end
+  local oline = origin.lnum or 1
+  local ocol = origin.col or 0 -- 0-based byte col
+  local pivot = nil
+  for idx, m in ipairs(matches) do
+    local mline = m[1]
+    local mcol0 = (m[2] or 1) - 1
+    if mline > oline or (mline == oline and mcol0 >= ocol) then
+      pivot = idx
+      break
+    end
+  end
+  if not pivot or pivot == 1 then
+    return matches
+  end
+  local rotated = {}
+  for i = pivot, #matches do
+    rotated[#rotated + 1] = matches[i]
+  end
+  for i = 1, pivot - 1 do
+    rotated[#rotated + 1] = matches[i]
+  end
+  return rotated
+end
+
 function M.search(query)
   M.clear_preview()
+  ensure_origin()
   if not query or query == "" then
+    -- Emptying the pattern (backspacing it all out) returns the cursor
+    -- to where the search started, exactly like nvim incsearch.
+    restore_origin()
+    pcall(vim.cmd, "nohlsearch")
     pcall(vim.rpcnotify, 1, "rio_search_matches", {})
     return
   end
@@ -84,13 +165,14 @@ function M.search(query)
       end
     end
   end
+  matches = rotate_to_nearest(matches, M._origin)
   pcall(vim.rpcnotify, 1, "rio_search_matches", matches)
 end
 
--- Move the cursor to `lnum` and paint a temporary line-highlight on
--- it so the user can see the result behind the popup. Highlight uses
--- the standard `Search` group so it picks up whatever the user's
--- theme assigns (matches what hlsearch would look like).
+-- Move the cursor to `lnum`, center the view, and light up every
+-- occurrence of `query` live (`hlsearch`) so the buffer behind the
+-- popup reads exactly like nvim's incsearch. The current match keeps a
+-- brighter overlay via the `Search`-group extmark.
 function M.preview(lnum, col, query)
   if not lnum or lnum <= 0 then
     return
@@ -106,17 +188,23 @@ function M.preview(lnum, col, query)
   local start_col = math.max((tonumber(col) or 1) - 1, 0)
   pcall(vim.api.nvim_win_set_cursor, 0, { lnum, start_col })
   if query and query ~= "" then
+    -- Live all-match highlight, like nvim incsearch. Setting the search
+    -- register + hlsearch paints every occurrence; `clear` (Esc) tears
+    -- it back down, and `commit` (Enter) leaves it in place so `n`/`N`
+    -- keep working.
+    pcall(vim.fn.setreg, "/", literal_search_pattern(query))
+    vim.o.hlsearch = true
     pcall(
       vim.api.nvim_buf_add_highlight,
       buf,
       NS,
-      "Search",
+      "IncSearch",
       lnum - 1,
       start_col,
       start_col + #query
     )
   else
-    pcall(vim.api.nvim_buf_add_highlight, buf, NS, "Search", lnum - 1, 0, -1)
+    pcall(vim.api.nvim_buf_add_highlight, buf, NS, "IncSearch", lnum - 1, 0, -1)
   end
   -- `zz` centers the line in the window so a series of arrow-down
   -- presses doesn't park results at the very bottom edge.
@@ -138,6 +226,10 @@ function M.commit(query, lnum, col, backward)
 
   local pattern = literal_search_pattern(query)
   M.clear_preview()
+  -- Committing "accepts" the previewed jump; forget the origin so a
+  -- later `clear` (e.g. Esc in Normal mode) doesn't yank us back to
+  -- where the search started.
+  M._origin = nil
   pcall(vim.fn.setreg, "/", pattern)
   vim.o.hlsearch = true
 
@@ -169,13 +261,16 @@ function M.clear_preview()
 end
 
 -- Tear down BOTH the rio-side preview highlight and nvim's native
--- hlsearch. Called from rust when the user explicitly bails out of
--- search:
+-- hlsearch, and restore the pre-search view. Called from rust when the
+-- user explicitly bails out of search:
 --   * Esc inside the palette without committing
 --   * Esc on the editor in Normal mode (the canonical "I'm done with
 --     search" gesture, mirroring `:nohlsearch`'s usual binding)
 function M.clear()
   M.clear_preview()
+  -- Cancel = go back exactly where the `/` started (nvim incsearch Esc).
+  restore_origin()
+  M._origin = nil
   pcall(vim.cmd, "nohlsearch")
 end
 

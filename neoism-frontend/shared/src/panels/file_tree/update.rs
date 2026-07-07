@@ -100,6 +100,9 @@ impl FileTree {
 
     pub fn set_focused(&mut self, f: bool) {
         self.focused = f;
+        if !f {
+            self.clear_pending();
+        }
     }
 
     pub fn is_focused(&self) -> bool {
@@ -813,6 +816,73 @@ impl FileTree {
     /// clamped to row 0. Wired to Ctrl+U in tree mode.
     pub fn select_prev_by(&mut self, n: usize) {
         self.move_selection_to(self.selected.saturating_sub(n));
+    }
+
+    /// Jump to the first row (vim `gg` / `1`).
+    pub fn select_first(&mut self) {
+        self.clear_pending();
+        if !self.entries.is_empty() {
+            self.move_selection_to(0);
+        }
+    }
+
+    /// Jump to the last row (vim `$` / `G`).
+    pub fn select_last(&mut self) {
+        self.clear_pending();
+        if !self.entries.is_empty() {
+            self.move_selection_to(self.entries.len().saturating_sub(1));
+        }
+    }
+
+    /// Jump to a 1-based row (vim `<count>G`), clamped to the last row.
+    pub fn goto_row(&mut self, one_based: usize) {
+        self.clear_pending();
+        if !self.entries.is_empty() {
+            self.move_selection_to(one_based.saturating_sub(1));
+        }
+    }
+
+    /// Feed a typed digit into the pending vim count. A leading `0` with
+    /// no count in progress is ignored (in vim `0` is a motion). Returns
+    /// true when the digit was absorbed.
+    pub fn push_count_digit(&mut self, digit: u32) -> bool {
+        self.pending_g = false;
+        if self.pending_count.is_none() && digit == 0 {
+            return false;
+        }
+        let acc = self.pending_count.unwrap_or(0);
+        self.pending_count = Some(acc.saturating_mul(10).saturating_add(digit as usize));
+        true
+    }
+
+    /// Consume the pending count, defaulting to 1 when none was typed.
+    pub fn take_count(&mut self) -> usize {
+        self.pending_g = false;
+        self.pending_count.take().unwrap_or(1).max(1)
+    }
+
+    /// Peek at the pending count without consuming it.
+    pub fn pending_count(&self) -> Option<usize> {
+        self.pending_count
+    }
+
+    /// Register a `g` keypress. Returns true when it completes a `gg`
+    /// (caller jumps to the top); false when it merely arms the first `g`.
+    pub fn note_g(&mut self) -> bool {
+        self.pending_count = None;
+        if self.pending_g {
+            self.pending_g = false;
+            true
+        } else {
+            self.pending_g = true;
+            false
+        }
+    }
+
+    /// Drop any half-entered count / `gg`.
+    pub fn clear_pending(&mut self) {
+        self.pending_count = None;
+        self.pending_g = false;
     }
 
     /// Move the selection to a specific row index. Mouse-click hit

@@ -64,6 +64,9 @@ impl ChromeBridge {
                     },
                     additions: f.additions,
                     deletions: f.deletions,
+                    // Web staging flows through the daemon (Pass 2); the
+                    // wire payload carries no index/worktree split yet.
+                    staged: false,
                 })
                 .collect();
             self.chrome.git_diff_panel.host_set_files(files);

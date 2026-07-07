@@ -228,6 +228,15 @@ impl NotesSidebar {
         self.refresh_notes();
     }
 
+    /// Expand `dir` in the tree (no note opened, selection untouched) —
+    /// used by the first-run welcome reveal. Mirrors how `set_workspace`
+    /// / `refresh_notes` insert the root into `open_dirs`, then rebuilds
+    /// the visible rows so the newly-expanded folder's children show.
+    pub fn reveal_dir(&mut self, dir: &std::path::Path) {
+        self.open_dirs.insert(dir.to_path_buf());
+        self.rebuild_rows();
+    }
+
     /// Mark the panel as wanting a fresh listing — set when something
     /// mutates the vault on disk (agent edits, file ops) while the panel
     /// is open. Native hosts can also just call [`refresh_notes`] which

@@ -725,90 +725,50 @@ use neoism_ui::Chrome;
         threads: &[neoism_protocol::agent::ThreadSummary],
         current_session_id: Option<&str>,
     ) -> Vec<neoism_ui::panels::agent_pane::state::picker::NeoismAgentPickerOption> {
+        use neoism_ui::panels::agent_pane::session_group::{
+            group_session_options, SessionOptionInput,
+        };
         use neoism_ui::panels::agent_pane::state::picker::NeoismAgentPickerOption;
 
-        threads
+        // Title-only rows grouped under cyan date headers ("Pinned" first,
+        // then newest day first) — the date header replaces the old
+        // per-row relative-time footer.
+        let inputs = threads
             .iter()
             .map(|thread| {
-                let footer = if Some(thread.session_id.as_str()) == current_session_id {
-                    "current".to_string()
-                } else if thread.updated_at > 0 {
-                    format_relative_time_ms(thread.updated_at)
-                } else {
-                    "untracked".to_string()
-                };
-                NeoismAgentPickerOption::new(
+                let mut option = NeoismAgentPickerOption::new(
                     if thread.title.trim().is_empty() {
                         "Untitled"
                     } else {
                         &thread.title
                     },
                     "",
-                    &footer,
+                    "",
                     &thread.session_id,
-                )
+                );
+                option.is_current =
+                    Some(thread.session_id.as_str()) == current_session_id;
+                option.pinned = thread.pinned;
+                SessionOptionInput {
+                    option,
+                    updated_ms: thread.updated_at,
+                }
             })
-            .collect()
-    }
-
-    pub(crate) fn format_relative_time_ms(updated_ms: u64) -> String {
-        let now_ms = js_sys::Date::now().max(0.0) as u64;
-        let diff_ms = now_ms.saturating_sub(updated_ms);
-        let seconds = diff_ms / 1000;
-        if seconds < 45 {
-            return "just now".to_string();
-        }
-        let minutes = seconds / 60;
-        if minutes < 2 {
-            return "1 minute ago".to_string();
-        }
-        if minutes < 60 {
-            return format!("{minutes} minutes ago");
-        }
-        let hours = minutes / 60;
-        if hours < 2 {
-            return "1 hour ago".to_string();
-        }
-        if hours < 24 {
-            return format!("{hours} hours ago");
-        }
-        let days = hours / 24;
-        if days < 2 {
-            return "1 day ago".to_string();
-        }
-        if days < 30 {
-            return format!("{days} days ago");
-        }
-        let months = days / 30;
-        if months < 2 {
-            return "1 month ago".to_string();
-        }
-        if months < 12 {
-            return format!("{months} months ago");
-        }
-        let years = months / 12;
-        if years < 2 {
-            "1 year ago".to_string()
-        } else {
-            format!("{years} years ago")
-        }
+            .collect::<Vec<_>>();
+        group_session_options(inputs)
     }
 
     pub(crate) fn session_entries_from_catalog(
         threads: &[neoism_protocol::agent::ThreadSummary],
     ) -> Vec<neoism_ui::panels::agent_pane::state::side_panel::NeoismAgentSessionEntry>
     {
-        use neoism_ui::panels::agent_pane::icon::AgentKind;
         use neoism_ui::panels::agent_pane::state::side_panel::NeoismAgentSessionEntry;
 
+        // Flat entries (no header rows — the side panel injects date-group
+        // headers itself), carrying the raw timestamp + pin flag.
         threads
             .iter()
             .map(|thread| {
-                let time_label = thread
-                    .agent
-                    .as_deref()
-                    .filter(|agent| !agent.trim().is_empty())
-                    .unwrap_or("session");
                 NeoismAgentSessionEntry::new(
                     &thread.session_id,
                     if thread.title.trim().is_empty() {
@@ -816,10 +776,10 @@ use neoism_ui::Chrome;
                     } else {
                         &thread.title
                     },
-                    time_label,
+                    "",
                 )
-                .with_agent_kind(AgentKind::from_label(time_label))
-                .with_runtime_status(thread.busy.then(|| "running".to_string()))
+                .with_updated_ms(thread.updated_at)
+                .with_pinned(thread.pinned)
             })
             .collect()
     }

@@ -118,10 +118,13 @@ fn shaders_modal_spec_lists_configured_shaders() {
 fn test_filtered_commands_empty_query() {
     let palette = CommandPalette::new();
     let filtered = palette.filtered_rows();
+    // `StopSharingCurrentWorkspace` is now generally visible (its old
+    // `!= Private` gate made it effectively unreachable), so it is no
+    // longer excluded here. `ShareCurrentWorkspace` stays visible in the
+    // default Private state, so it needs no special-casing either.
     let expected = COMMANDS
         .iter()
         .filter(|cmd| cmd.action != PaletteAction::ToggleAppearanceTheme)
-        .filter(|cmd| cmd.action != PaletteAction::StopSharingCurrentWorkspace)
         .filter(|cmd| command_visible_for_surface(&cmd.action, PaletteSurface::Terminal))
         .count();
     assert_eq!(filtered.len(), expected);

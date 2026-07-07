@@ -186,6 +186,43 @@ pub(crate) async fn session_update(
     Ok(Json(info))
 }
 
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SetPinRequest {
+    /// Desired pin state. When omitted the flag is toggled relative to its
+    /// current value (so a bare POST flips it).
+    pub(crate) pinned: Option<bool>,
+}
+
+/// `POST /session/:id/pin` — set, clear, or toggle the session's pinned flag.
+///
+/// Sibling of the goal routes: the flag lives in [`SessionInfo::extra`] and is
+/// persisted into the session store (its `info_json`) so it survives reloads
+/// and shows up in the session list / cross-device sync. Returns the updated
+/// [`SessionInfo`].
+pub(crate) async fn session_set_pin(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+    body: Option<Json<SetPinRequest>>,
+) -> Result<Json<SessionInfo>, ApiError> {
+    let request = body.map(|Json(body)| body).unwrap_or_default();
+    let mut info = state
+        .inner
+        .store
+        .get_session(&session_id)
+        .await?
+        .ok_or_else(|| ApiError::not_found("Session not found"))?;
+    let next = request.pinned.unwrap_or(!info.pinned());
+    info.set_pinned(next);
+    info.time.updated = now_millis();
+    state.inner.store.update_session(&info).await?;
+    state.publish(EventPayload::new(
+        event_type::SESSION_UPDATED,
+        json!({ "sessionID": session_id, "info": info }),
+    ));
+    Ok(Json(info))
+}
+
 pub(crate) async fn session_children(
     State(state): State<AppState>,
     Path(session_id): Path<String>,

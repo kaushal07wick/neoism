@@ -533,7 +533,14 @@ impl Screen<'_> {
             }
             PaletteAction::CloseCurrentSplitOrTab => self.close_split_or_tab(clipboard),
             PaletteAction::ConfigEditor => {
-                self.context_manager.switch_to_settings();
+                // Open the real config.toml as a tab in the nvim editor
+                // (create the default file first if it's missing).
+                let config_path =
+                    neoism_backend::config::config_dir_path().join("config.toml");
+                if !config_path.exists() {
+                    neoism_backend::config::create_config_file(None);
+                }
+                self.open_path_in_editor(config_path);
             }
             PaletteAction::WindowCreateNew => {
                 self.context_manager.create_new_window();
@@ -642,6 +649,11 @@ impl Screen<'_> {
             PaletteAction::SearchForward => {
                 if self.context_manager.current().editor.is_some() {
                     self.renderer.command_palette.enter_search_mode();
+                    // Snapshot the pre-search view so Esc restores it
+                    // (nvim incsearch cancel).
+                    self.send_editor_command(
+                        neoism_backend::performer::nvim::vim_search_begin_command(),
+                    );
                     self.mark_dirty();
                 } else {
                     self.start_search(Direction::Right);
@@ -650,6 +662,9 @@ impl Screen<'_> {
             PaletteAction::SearchBackward => {
                 if self.context_manager.current().editor.is_some() {
                     self.renderer.command_palette.enter_search_mode_backward();
+                    self.send_editor_command(
+                        neoism_backend::performer::nvim::vim_search_begin_command(),
+                    );
                     self.mark_dirty();
                 } else {
                     self.start_search(Direction::Left);
@@ -669,7 +684,10 @@ impl Screen<'_> {
                 self.open_finder_grep();
             }
             PaletteAction::SearchGitChanges => {
-                self.open_git_changes_finder();
+                // Surface every changed file *with* its per-file diff by
+                // opening the rich Git Diff panel (the same panel Alt+G
+                // toggles), rather than the plain pick-a-file finder list.
+                self.open_git_diff_panel();
             }
             PaletteAction::ToggleGitDiffPanel => {
                 self.toggle_git_diff_panel();
@@ -742,11 +760,16 @@ impl Screen<'_> {
                 terminal.clear_saved_history();
             }
             PaletteAction::ListFonts => {
-                // Handled in the router: switches the palette into fonts
-                // mode and keeps it open. If we land here it's either a
-                // bug (router should have intercepted) or an external
-                // caller firing the action directly — do nothing so the
-                // palette just closes without side effects.
+                // The palette/router Enter + click paths intercept this
+                // and keep the palette open in fonts mode. External
+                // callers (the Alt+K command sheet / a context menu)
+                // dispatch through here instead, so mirror ListBuffers /
+                // ShowWorkplaces and enter fonts mode ourselves — a
+                // no-op here is exactly why "List Fonts opens nothing"
+                // from those surfaces. `enter_fonts_mode` re-opens the
+                // palette, so this works even when we were closed first.
+                let fonts = self.sugarloaf.font_family_names();
+                self.renderer.command_palette.enter_fonts_mode(fonts);
             }
             PaletteAction::ListBuffers => {
                 self.open_workspace_buffers_picker();

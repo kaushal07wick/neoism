@@ -44,29 +44,34 @@ impl Screen<'_> {
             // Order mirrors the shared `splash_overlay::MENU` literal
             // in `neoism-ui/src/panels/splash_overlay.rs`:
             //   0 = Open file tree
-            //   1 = Neoism Agent
-            //   2 = Search
-            //   3 = Command palette
+            //   1 = Notes (notes sidebar → default vault + Welcome docs)
+            //   2 = Neoism Agent
+            //   3 = Search
+            //   4 = Command palette
             match idx {
                 0 => {
-                    // File tree is a side panel, not a modal —
-                    // it can co-exist with anything visually.
-                    // Still dismiss any modal that's up so the
-                    // tree-open click doesn't leave a stale
-                    // palette floating in the middle of the
-                    // window.
+                    // File tree is a side panel, not a modal — it can
+                    // co-exist visually. Still dismiss any open modal so
+                    // the click doesn't leave a stale palette floating.
                     self.dismiss_other_modals(SplashModalKind::None);
                     self.toggle_file_tree();
                 }
                 1 => {
+                    // Notes sidebar is a side panel like the file tree —
+                    // opens onto the default vault, where the bundled
+                    // `Welcome/` getting-started docs live.
+                    self.dismiss_other_modals(SplashModalKind::None);
+                    self.open_neoism_notes_sidebar();
+                }
+                2 => {
                     self.dismiss_other_modals(SplashModalKind::None);
                     self.open_neoism_agent_tab();
                 }
-                2 => {
+                3 => {
                     self.dismiss_other_modals(SplashModalKind::Finder);
                     self.open_finder_files();
                 }
-                3 => {
+                4 => {
                     self.dismiss_other_modals(SplashModalKind::CommandPalette);
                     self.open_command_palette();
                 }

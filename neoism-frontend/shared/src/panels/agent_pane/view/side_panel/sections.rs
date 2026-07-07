@@ -1,6 +1,19 @@
 use super::*;
 use super::draw::{draw_status_dot_text, draw_subagent_spinner, push_provider_icon_clipped, intersect_rect};
 
+/// H3-heading font size for the agent side-panel section titles. Mirrors the
+/// Markdown renderer's `heading_level_font_size(3)` (22.5px, on the 17px
+/// markdown body baseline) rescaled to the 14px global text baseline exactly
+/// like `markdown_font`, so the section titles read as a `### ` H3 heading.
+/// Kept in one place so the header itself and the "Directory" chevron that
+/// rides its baseline stay in sync.
+pub(crate) fn section_header_font_size(s: f32) -> f32 {
+    const MD_H3_FONT_SIZE: f32 = 22.5;
+    const MD_BODY_FONT_SIZE: f32 = 17.0;
+    const MD_GLOBAL_BASELINE_FONT_SIZE: f32 = 14.0;
+    MD_H3_FONT_SIZE * (MD_GLOBAL_BASELINE_FONT_SIZE / MD_BODY_FONT_SIZE) * s
+}
+
 pub(crate) fn render_section_header(
     sugarloaf: &mut Sugarloaf,
     label: &str,
@@ -11,22 +24,63 @@ pub(crate) fn render_section_header(
     clip: [f32; 4],
     occlusion_rects: &[[f32; 4]],
 ) -> f32 {
-    let opts = DrawOpts {
-        font_size: FONT_SIZE * s * 0.82,
-        color: theme.u8(theme.muted),
+    // Styled like a Markdown H3 heading: the mirrored H3 size, bold, drawn in
+    // the whitest theme token (`theme.fg` == 0xe8e8e8 on pastel_dark; the
+    // `theme.white` token is a bluish grey there) rather than the old muted
+    // header grey.
+    let header_size = section_header_font_size(s);
+    let rest_opts = DrawOpts {
+        font_size: header_size,
+        color: theme.u8(theme.fg),
         bold: true,
         clip_rect: Some(clip),
         ..DrawOpts::default()
     };
-    draw_text_with_occlusion(
-        sugarloaf,
-        x,
-        y,
-        &label.to_ascii_uppercase(),
-        &opts,
-        occlusion_rects,
-    );
-    y + FONT_SIZE * s * 1.6
+
+    // Illuminated drop-cap: the first letter in the UnifrakturMaguntia
+    // blackletter, scaled up from the H3 header size and drawn white; the rest
+    // of the label in the bold H3 header font on the same baseline. Falls back
+    // to a plain header if the font is missing.
+    let mut chars = label.chars();
+    if let Some(first) = chars.next() {
+        let rest: String = chars.collect();
+        let cap_font = crate::primitives::maguntia_font_id(sugarloaf);
+        let cap_size = header_size * 1.4;
+        let cap_opts = DrawOpts {
+            font_size: cap_size,
+            color: theme.u8(theme.fg),
+            bold: false,
+            italic: false,
+            font_id: cap_font,
+            clip_rect: Some(clip),
+        };
+        let first_str = first.to_string();
+        // Lift the taller cap so its baseline matches the rest (text y is the
+        // glyph top, so a larger glyph would otherwise sit lower).
+        let cap_y = y - (cap_size - header_size) * 0.75;
+        draw_text_with_occlusion(
+            sugarloaf,
+            x,
+            cap_y,
+            &first_str,
+            &cap_opts,
+            occlusion_rects,
+        );
+        if !rest.is_empty() {
+            let cap_w = sugarloaf.text_mut().measure(&first_str, &cap_opts);
+            draw_text_with_occlusion(
+                sugarloaf,
+                x + cap_w + 1.0 * s,
+                y,
+                &rest,
+                &rest_opts,
+                occlusion_rects,
+            );
+        }
+    }
+    // Advance past the taller H3 title with breathing room so the value line
+    // below never rides up into its descenders or the raised drop-cap.
+    y + header_size * 1.5
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -52,6 +106,77 @@ pub(crate) fn render_text_line(
     let truncated = truncate_to_fit(line, width, sugarloaf, &opts);
     draw_text_with_occlusion(sugarloaf, x, y, &truncated, &opts, occlusion_rects);
     y + FONT_SIZE * s * 1.5
+}
+
+/// Render the clickable "Directory" section — the drop-cap header with a
+/// trailing `▾` chevron (so it reads as a dropdown) plus the compacted
+/// working-directory path below it. Registers the header+path screen rect
+/// on the side panel so the host's click handler can open the
+/// working-directory picker. Shared by chat mode (`render_session_info`)
+/// and home mode (`render_sessions_list`). Returns the `y` below it.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn render_directory_section(
+    sugarloaf: &mut Sugarloaf,
+    pane: &mut impl AgentSidePanelPane,
+    x: f32,
+    y: f32,
+    width: f32,
+    theme: &IdeTheme,
+    s: f32,
+    clip: [f32; 4],
+    occlusion_rects: &[[f32; 4]],
+) -> f32 {
+    let hit_top = y - 3.0 * s;
+
+    // A small down-chevron pinned to the right edge of the header row so the
+    // section reads as a clickable dropdown. Uses the same Font Awesome
+    // chevron glyph the bottom-input agent/model/thinking chips carry.
+    let chevron = "\u{f078}";
+    let chevron_opts = DrawOpts {
+        font_size: FONT_SIZE * s * 0.66,
+        color: theme.u8(theme.muted),
+        clip_rect: Some(clip),
+        ..DrawOpts::default()
+    };
+    let chevron_w = sugarloaf.text_mut().measure(chevron, &chevron_opts);
+    let chevron_font = FONT_SIZE * s * 0.66;
+    draw_text_with_occlusion(
+        sugarloaf,
+        x + width - chevron_w,
+        // Vertically centre the small chevron on the taller H3 header row so
+        // it reads as the header's dropdown affordance rather than floating at
+        // the title's top.
+        y + (section_header_font_size(s) - chevron_font) * 0.5,
+        chevron,
+        &chevron_opts,
+        occlusion_rects,
+    );
+
+    let mut y = render_section_header(
+        sugarloaf, "Directory", x, y, theme, s, clip, occlusion_rects,
+    );
+    let label = pane.directory_label();
+    y = render_text_line(
+        sugarloaf,
+        &label,
+        x,
+        y,
+        width,
+        theme.u8(theme.fg),
+        theme,
+        s,
+        clip,
+        occlusion_rects,
+    );
+
+    // Register the header+path as one click target, clamped to the visible
+    // content clip so a scrolled-away header isn't clickable.
+    let hit_rect = [x, hit_top, width, (y - hit_top).max(0.0)];
+    match intersect_rect(hit_rect, clip) {
+        Some(visible) => pane.side_panel_mut().set_directory_hit_rect(visible),
+        None => pane.side_panel_mut().clear_directory_hit_rect(),
+    }
+    y
 }
 
 fn render_kv_row(
@@ -131,23 +256,12 @@ pub(crate) fn render_session_info<I: AgentSidePanelIconHost>(
     let mut y = content_top - scroll;
 
     // --- Directory ---
-    y = render_section_header(
+    y = render_directory_section(
         sugarloaf,
-        "Directory",
-        text_x,
-        y,
-        theme,
-        s,
-        clip,
-        occlusion_rects,
-    );
-    y = render_text_line(
-        sugarloaf,
-        &pane.directory_label(),
+        pane,
         text_x,
         y,
         text_w,
-        theme.u8(theme.fg),
         theme,
         s,
         clip,
@@ -454,7 +568,8 @@ fn tasks_section_height(todos_len: usize, s: f32) -> f32 {
         return 0.0;
     }
     let visible = todos_len.min(TASKS_MAX_VISIBLE);
-    let header_h = FONT_SIZE * s * 1.6;
+    // Matches `render_section_header`'s H3 advance (`header_size * 1.5`).
+    let header_h = section_header_font_size(s) * 1.5;
     let rows_h = visible as f32 * side_panel_task_row_height(s);
     let overflow_h = if todos_len > TASKS_MAX_VISIBLE {
         FONT_SIZE * s * 1.45

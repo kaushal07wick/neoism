@@ -18,6 +18,7 @@ pub mod outbound;
 pub mod permission_policy;
 pub mod protocol_mapping;
 pub mod resolve_link_path;
+pub mod session_group;
 pub mod state;
 pub mod status_policy;
 pub mod stream_events;

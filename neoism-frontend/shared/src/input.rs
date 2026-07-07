@@ -189,6 +189,32 @@ impl SimpleInputBuffer {
         self.completion_items.clear();
     }
 
+    /// Insert `s` at the cursor and advance past it. Used by frontends
+    /// that own a small self-driven text field (e.g. the git panel's
+    /// commit-message box) rather than a host-fed snapshot.
+    pub fn insert_str(&mut self, s: &str) {
+        let at = self.cursor_byte.min(self.text.len());
+        self.text.insert_str(at, s);
+        self.cursor_byte = at + s.len();
+        self.completion_items.clear();
+    }
+
+    /// Delete the character immediately before the cursor.
+    pub fn backspace(&mut self) {
+        let at = self.cursor_byte.min(self.text.len());
+        if at == 0 {
+            return;
+        }
+        let prev = self.text[..at]
+            .char_indices()
+            .next_back()
+            .map(|(i, _)| i)
+            .unwrap_or(0);
+        self.text.replace_range(prev..at, "");
+        self.cursor_byte = prev;
+        self.completion_items.clear();
+    }
+
     pub fn text(&self) -> &str {
         &self.text
     }

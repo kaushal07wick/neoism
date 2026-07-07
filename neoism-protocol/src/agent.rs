@@ -607,6 +607,9 @@ pub struct ThreadSummary {
     /// Whether the session is currently running a turn.
     #[serde(default)]
     pub busy: bool,
+    /// Whether the session is pinned to the top of the session list.
+    #[serde(default)]
+    pub pinned: bool,
 }
 
 /// One message from a session's persisted timeline. Shape is

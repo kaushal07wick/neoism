@@ -972,7 +972,19 @@ impl<A: Send + Copy + 'static> Chrome<A> {
         };
 
         if self.git_diff_panel.is_visible() {
-            match self.git_diff_panel.hit_test(*x, *y) {
+            let hit = self.git_diff_panel.hit_test(*x, *y);
+            // A click outside the branch dropdown closes it first.
+            if self.git_diff_panel.branch_menu_is_open()
+                && !matches!(
+                    hit,
+                    GitPanelHit::BranchMenuRow(_)
+                        | GitPanelHit::BranchFilterBox
+                        | GitPanelHit::BranchButton
+                )
+            {
+                self.git_diff_panel.close_branch_menu();
+            }
+            match hit {
                 GitPanelHit::Close => {
                     self.git_diff_panel.close();
                     self.relayout();
@@ -980,6 +992,7 @@ impl<A: Send + Copy + 'static> Chrome<A> {
                 }
                 GitPanelHit::FileRow(idx) => {
                     self.git_diff_panel.set_focused(true);
+                    self.git_diff_panel.focus_files_section();
                     if let Some(tree) = self.file_tree.as_mut() {
                         tree.set_focused(false);
                     }
@@ -987,8 +1000,73 @@ impl<A: Send + Copy + 'static> Chrome<A> {
                     self.git_diff_panel.select_file(idx);
                     return true;
                 }
+                GitPanelHit::FileCheckbox(idx) => {
+                    self.git_diff_panel.set_focused(true);
+                    self.git_diff_panel.focus_files_section();
+                    if let Some(tree) = self.file_tree.as_mut() {
+                        tree.set_focused(false);
+                    }
+                    self.blur(PanelKey::FileTree);
+                    self.git_diff_panel.toggle_stage(idx);
+                    return true;
+                }
+                GitPanelHit::CommitBox => {
+                    self.git_diff_panel.focus_commit_box(true);
+                    if let Some(tree) = self.file_tree.as_mut() {
+                        tree.set_focused(false);
+                    }
+                    self.blur(PanelKey::FileTree);
+                    return true;
+                }
+                GitPanelHit::CommitButton => {
+                    self.git_diff_panel.set_focused(true);
+                    if let Some(tree) = self.file_tree.as_mut() {
+                        tree.set_focused(false);
+                    }
+                    self.blur(PanelKey::FileTree);
+                    self.git_diff_panel.commit();
+                    return true;
+                }
+                GitPanelHit::StageAllButton => {
+                    self.git_diff_panel.set_focused(true);
+                    if let Some(tree) = self.file_tree.as_mut() {
+                        tree.set_focused(false);
+                    }
+                    self.blur(PanelKey::FileTree);
+                    self.git_diff_panel.stage_all();
+                    return true;
+                }
+                GitPanelHit::FolderToggle(visual_ix) => {
+                    self.git_diff_panel.set_focused(true);
+                    self.git_diff_panel.focus_files_section();
+                    if let Some(tree) = self.file_tree.as_mut() {
+                        tree.set_focused(false);
+                    }
+                    self.blur(PanelKey::FileTree);
+                    self.git_diff_panel.toggle_folder(visual_ix);
+                    return true;
+                }
+                GitPanelHit::BranchButton => {
+                    self.git_diff_panel.set_focused(true);
+                    if let Some(tree) = self.file_tree.as_mut() {
+                        tree.set_focused(false);
+                    }
+                    self.blur(PanelKey::FileTree);
+                    self.git_diff_panel.toggle_branch_menu();
+                    return true;
+                }
+                GitPanelHit::BranchFilterBox => {
+                    // Keep the dropdown open; clicks in the search box are
+                    // consumed without further action.
+                    return true;
+                }
+                GitPanelHit::BranchMenuRow(slot) => {
+                    self.git_diff_panel.activate_branch_row(slot);
+                    return true;
+                }
                 GitPanelHit::Inside => {
                     self.git_diff_panel.set_focused(true);
+                    self.git_diff_panel.focus_files_section();
                     if let Some(tree) = self.file_tree.as_mut() {
                         tree.set_focused(false);
                     }

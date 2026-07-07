@@ -329,6 +329,13 @@ impl CommandPalette {
     /// palette open. Called by the router after the user picks the
     /// `List Fonts` command.
     pub fn enter_fonts_mode(&mut self, fonts: Vec<String>) {
+        // Mirror `enter_themes_mode` / `enter_shaders_mode`: force the
+        // palette open. The common trigger already has it open, but
+        // dispatch paths that fire the action from a closed palette
+        // (the Alt+K command sheet / a context menu going through
+        // `execute_palette_action`) rely on this to actually show the
+        // font list instead of silently entering a hidden mode.
+        self.enabled = true;
         self.mode = PaletteMode::Fonts(fonts);
         self.query.clear();
         self.selected_index = 0;

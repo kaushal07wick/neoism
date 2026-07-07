@@ -8,7 +8,8 @@ pub mod tabs;
 
 use neoism_ui::panels::{
     breadcrumbs, buffer_tabs, chrome_topbar, command_composer, command_palette,
-    completion_menu, context_menu, diagnostics_popup, editor_scroll, finder,
+    completion_menu, context_menu, diagnostics_popup, editor_scroll,
+    finder,
     inline_diagnostics, minimap, notes_sidebar, notifications, search, status_line,
     trail_cursor, yank_flash,
 };

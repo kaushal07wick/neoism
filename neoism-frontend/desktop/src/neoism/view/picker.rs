@@ -8,4 +8,8 @@ impl AgentPickerPane for NeoismAgentPane {
     fn picker_mut(&mut self) -> Option<&mut NeoismAgentPicker> {
         self.picker_mut()
     }
+
+    fn picker_rename_buffer(&self) -> Option<String> {
+        self.session_rename_buffer()
+    }
 }

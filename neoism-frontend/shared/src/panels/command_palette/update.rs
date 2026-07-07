@@ -427,10 +427,17 @@ impl CommandPalette {
                                 return workspace_visibility
                                     == crate::panels::context_menu::WorkspaceChromeVisibility::Private;
                             }
-                            PaletteAction::StopSharingCurrentWorkspace => {
-                                return workspace_visibility
-                                    != crate::panels::context_menu::WorkspaceChromeVisibility::Private;
-                            }
+                            // `StopSharingCurrentWorkspace` used to be gated
+                            // to `!= Private`, but that visibility signal
+                            // comes from the daemon workspace cache and is
+                            // Private in the common case (a fresh/local
+                            // workspace isn't in the cache, and a just-shared
+                            // one may not have propagated yet), so the command
+                            // was effectively unreachable. Make it generally
+                            // visible — mirroring how ShareCurrentWorkspace is
+                            // reachable in its default state — and let the
+                            // execute path send the request (a no-op on the
+                            // daemon when nothing is shared).
                             _ => {}
                         }
                         super::actions::command_visible_for_surface(&cmd.action, surface)

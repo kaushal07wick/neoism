@@ -515,6 +515,131 @@ impl NeoismAgentPane {
         }
     }
 
+    /// Selected `(session_id, title, pinned)` in an open `/sessions` picker.
+    fn selected_session_row(&self) -> Option<(String, String, bool)> {
+        let picker = self.picker.as_ref()?;
+        if picker.kind != NeoismAgentPickerKind::Session {
+            return None;
+        }
+        let option = picker.selected_option()?;
+        if option.value.trim().is_empty() {
+            return None;
+        }
+        Some((option.value.clone(), option.title.clone(), option.pinned))
+    }
+
+    /// Re-fetch sessions and refresh the open Session picker + side panel
+    /// after a pin / delete / rename mutation.
+    fn refresh_sessions_after_mutation(&mut self) {
+        let current = self.session_id.clone();
+        let directory = self.directory.clone();
+        if let Ok(options) =
+            fetch_session_options(&self.server, current.as_deref(), directory.as_deref())
+        {
+            if let Some(picker) = self
+                .picker
+                .as_mut()
+                .filter(|picker| picker.kind == NeoismAgentPickerKind::Session)
+            {
+                picker.replace_options(options);
+            }
+        }
+        if let Ok(entries) =
+            fetch_session_entries(&self.server, current.as_deref(), directory.as_deref())
+        {
+            self.side_panel.set_sessions(entries);
+        }
+    }
+
+    /// Whether an open picker is the `/sessions` picker (gates the
+    /// pin/delete/rename shortcuts + inline rename in the key bridge).
+    pub fn session_picker_open(&self) -> bool {
+        self.picker
+            .as_ref()
+            .is_some_and(|picker| picker.kind == NeoismAgentPickerKind::Session)
+    }
+
+    /// `ctrl+f` — toggle the pinned flag of the selected session.
+    pub fn toggle_selected_session_pin(&mut self) -> bool {
+        let Some((id, _title, pinned)) = self.selected_session_row() else {
+            return false;
+        };
+        if let Err(error) = set_session_pinned(&self.server, &id, !pinned) {
+            self.system_message("Sessions", error);
+        } else {
+            self.refresh_sessions_after_mutation();
+        }
+        true
+    }
+
+    /// `ctrl+d` — delete the selected session.
+    pub fn delete_selected_session(&mut self) -> bool {
+        let Some((id, _title, _pinned)) = self.selected_session_row() else {
+            return false;
+        };
+        if let Err(error) = delete_session(&self.server, &id) {
+            self.system_message("Sessions", error);
+            return true;
+        }
+        if self.session_id.as_deref() == Some(id.as_str()) {
+            self.create_new_session();
+        }
+        self.refresh_sessions_after_mutation();
+        true
+    }
+
+    /// `ctrl+r` — start an inline rename of the selected session.
+    pub fn begin_selected_session_rename(&mut self) -> bool {
+        let Some((id, title, _pinned)) = self.selected_session_row() else {
+            return false;
+        };
+        self.session_rename = Some((id, title));
+        true
+    }
+
+    pub fn session_rename_active(&self) -> bool {
+        self.session_rename.is_some()
+    }
+
+    pub fn session_rename_buffer(&self) -> Option<String> {
+        self.session_rename
+            .as_ref()
+            .map(|(_, buffer)| buffer.clone())
+    }
+
+    pub fn push_session_rename(&mut self, text: &str) {
+        if let Some((_, buffer)) = self.session_rename.as_mut() {
+            buffer.push_str(text);
+        }
+    }
+
+    pub fn backspace_session_rename(&mut self) {
+        if let Some((_, buffer)) = self.session_rename.as_mut() {
+            buffer.pop();
+        }
+    }
+
+    pub fn cancel_session_rename(&mut self) {
+        self.session_rename = None;
+    }
+
+    /// Commit the inline rename: PATCH the session title and refresh.
+    pub fn commit_session_rename(&mut self) -> bool {
+        let Some((id, buffer)) = self.session_rename.take() else {
+            return false;
+        };
+        let title = buffer.trim().to_string();
+        if title.is_empty() {
+            return true;
+        }
+        if let Err(error) = rename_session(&self.server, &id, &title) {
+            self.system_message("Sessions", error);
+        } else {
+            self.refresh_sessions_after_mutation();
+        }
+        true
+    }
+
     pub(crate) fn set_skill_options(
         &mut self,
         directory: Option<String>,
@@ -588,8 +713,42 @@ impl NeoismAgentPane {
         }
     }
 
+    /// Drop directory-keyed caches (the skill catalog) so they re-fetch for
+    /// a newly-selected working directory. Lives here because the cache
+    /// fields are private to the `pane` module; `apply_directory` (in the
+    /// sibling `commands` module) drives the rest of the cwd-change flow.
+    pub(crate) fn invalidate_directory_caches(&mut self) {
+        self.skill_options.clear();
+        self.skill_options_directory = None;
+    }
+
+    /// Open the working-directory dropdown from the side panel's
+    /// "Directory" header. Lists the current directory's parent (`..`) and
+    /// its immediate subdirectories from the local filesystem — the desktop
+    /// fork is always local, so a plain `read_dir` is the right source.
+    /// Selecting a row re-scopes the pane via [`apply_directory`].
+    pub fn open_directory_picker(&mut self) {
+        let base = self
+            .directory
+            .clone()
+            .or_else(|| {
+                std::env::current_dir()
+                    .ok()
+                    .map(|path| path.to_string_lossy().into_owned())
+            })
+            .unwrap_or_else(|| ".".to_string());
+        let options = directory_picker_options(&base);
+        self.picker = Some(NeoismAgentPicker::new(
+            NeoismAgentPickerKind::Directory,
+            "Working directory",
+            options,
+            0,
+        ));
+    }
+
     pub fn close_picker(&mut self) {
         self.picker = None;
+        self.session_rename = None;
         self.file_mention_anchor = None;
         if self.input == "/" {
             self.input.clear();
@@ -646,4 +805,57 @@ impl NeoismAgentPane {
         true
     }
 
+}
+
+/// Build the working-directory dropdown rows for `base`: a `..` row for the
+/// parent, then `base`'s immediate subdirectories (alphabetical, hidden
+/// dot-directories skipped). Each row's `value` is the absolute target
+/// path that [`NeoismAgentPane::apply_directory`] switches the cwd to.
+fn directory_picker_options(base: &str) -> Vec<NeoismAgentPickerOption> {
+    use std::path::{Path, PathBuf};
+
+    let base_path: PathBuf = std::fs::canonicalize(base)
+        .unwrap_or_else(|_| Path::new(base).to_path_buf());
+    let mut out = Vec::new();
+
+    if let Some(parent) = base_path.parent() {
+        let parent = parent.to_string_lossy().into_owned();
+        out.push(NeoismAgentPickerOption::new(
+            "..",
+            &compact_directory_label(&parent),
+            "parent",
+            &parent,
+        ));
+    }
+
+    if let Ok(entries) = std::fs::read_dir(&base_path) {
+        let mut dirs: Vec<(String, String)> = entries
+            .flatten()
+            .filter_map(|entry| {
+                if !entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+                    return None;
+                }
+                let name = entry.file_name().to_string_lossy().into_owned();
+                if name.starts_with('.') {
+                    return None;
+                }
+                Some((name, entry.path().to_string_lossy().into_owned()))
+            })
+            .collect();
+        dirs.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+        for (name, path) in dirs {
+            let footer = compact_directory_label(&path);
+            out.push(NeoismAgentPickerOption::new(&name, &footer, "dir", &path));
+        }
+    }
+
+    if out.is_empty() {
+        out.push(NeoismAgentPickerOption::new(
+            "no subdirectories",
+            &compact_directory_label(&base_path.to_string_lossy()),
+            "empty",
+            "",
+        ));
+    }
+    out
 }

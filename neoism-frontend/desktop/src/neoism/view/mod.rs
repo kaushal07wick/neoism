@@ -27,6 +27,12 @@ impl AgentPaneView for NeoismAgentPane {
         NeoismAgentPane::picker(self).map(|picker| picker.options().len())
     }
 
+    fn picker_has_session_footer(&self) -> bool {
+        use neoism_ui::panels::agent_pane::state::picker::NeoismAgentPickerKind;
+        NeoismAgentPane::picker(self)
+            .is_some_and(|picker| picker.kind == NeoismAgentPickerKind::Session)
+    }
+
     fn log_render_perf(
         &mut self,
         elapsed_us: u128,

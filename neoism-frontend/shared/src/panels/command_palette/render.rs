@@ -14,6 +14,7 @@ use crate::panels::file_tree;
 use crate::primitives::IdeTheme;
 use crate::widgets::scrollbar;
 
+use super::commands::CommandService;
 use super::fuzzy::{ease_out_back, ease_out_cubic, snap_to_device_px, truncate_to_fit};
 use super::modes::{PaletteMode, PaletteRow};
 use super::state::CommandPalette;
@@ -73,8 +74,11 @@ pub(crate) fn stroke_rounded_rect(
     );
 }
 
+/// Draw a modal card with only its top corners rounded (bottom flush),
+/// layering a `stroke_color` outer quad and an inset `fill_color` inner
+/// quad.
 #[allow(clippy::too_many_arguments)]
-fn draw_modal_frame_top(
+pub(crate) fn draw_modal_frame_top(
     sugarloaf: &mut Sugarloaf,
     x: f32,
     y: f32,
@@ -335,6 +339,37 @@ impl CommandPalette {
                 .overlay_text_mut()
                 .draw(text_x, text_y, display_text, &input_opts);
 
+        // `/`-search: nvim-style `[cur/total]` match count, right-aligned
+        // + muted in the input row. `cur` = highlighted match position
+        // (1-based), `total` = live buffer-match count; both update as
+        // matches stream in. Zero matches renders `[0/0]`. Only shown
+        // once the user has typed a pattern (empty query lists recents).
+        if matches!(self.mode, PaletteMode::Search) && !self.query.is_empty() {
+            let total = self.buffer_matches.len();
+            let cur = if total == 0 {
+                0
+            } else {
+                self.selected_index.min(total - 1) + 1
+            };
+            let count_label = format!("[{cur}/{total}]");
+            let count_opts = DrawOpts {
+                font_size: input_font,
+                color: theme.u8(theme.muted),
+                clip_rect: Some(input_clip),
+                ..DrawOpts::default()
+            };
+            let count_w = sugarloaf
+                .overlay_text_mut()
+                .measure(&count_label, &count_opts);
+            // Right-align inside the input, but never overlap the typed
+            // query (clamp the start x to the query's right edge).
+            let count_x = (input_x + input_width - input_pad_x - count_w)
+                .max(text_x + input_rendered_width + input_pad_x);
+            sugarloaf
+                .overlay_text_mut()
+                .draw(count_x, text_y, &count_label, &count_opts);
+        }
+
         let elapsed_ms = Instant::now()
             .saturating_duration_since(self.caret_blink_start)
             .as_millis();
@@ -395,6 +430,17 @@ impl CommandPalette {
         let shortcut_opts = DrawOpts {
             font_size: shortcut_font,
             color: theme.u8(theme.muted),
+            clip_rect: Some(list_clip),
+            ..DrawOpts::default()
+        };
+        // Command rows swap the muted raw-shortcut hint for a green
+        // bracketed keybind chip, matching the Alt+K command sheet /
+        // splash menu (`[165, 230, 170]`, bold). Every other row kind
+        // keeps `shortcut_opts` untouched.
+        let command_chip_opts = DrawOpts {
+            font_size: shortcut_font,
+            color: [165, 230, 170, 255],
+            bold: true,
             clip_rect: Some(list_clip),
             ..DrawOpts::default()
         };
@@ -487,11 +533,28 @@ impl CommandPalette {
             // their workspace children are indented one tree level under
             // them, mirroring file_tree's folder→file nesting.
             let is_host_header = matches!(row, PaletteRow::WorkspaceHost { .. });
+            // Command rows get the Alt+K command-sheet treatment: a
+            // per-service icon, a bold label, and a green keybind chip.
+            let is_command = matches!(row, PaletteRow::Command { .. });
             let row_indent = match row {
                 PaletteRow::Workspace { .. } => file_tree::INDENT_PX * s,
                 _ => 0.0,
             };
             let (row_icon, row_icon_color) = match row {
+                // Per-service nerd-font glyph in the command-sheet's muted
+                // slate (`[205, 215, 235]`), brightened on the active row
+                // (`[230, 240, 255]`). Prefix→service reverse-lookup keeps
+                // `CommandService::icon()` the single icon source.
+                PaletteRow::Command { service, .. } => {
+                    let icon = CommandService::from_prefix(service)
+                        .map(CommandService::icon);
+                    let color = if is_selected {
+                        [230, 240, 255, 255]
+                    } else {
+                        [205, 215, 235, 255]
+                    };
+                    (icon, color)
+                }
                 PaletteRow::Buffer { entry } => {
                     if entry.detail.starts_with(WORKSPACE_ROOT_DETAIL_PREFIX) {
                         let (icon, color) = file_tree::workspace_root_icon();
@@ -574,12 +637,32 @@ impl CommandPalette {
 
             // Right-side hint: shortcut for commands, copy icon for
             // font rows (signals "Enter copies this to clipboard").
-            let shortcut = row.shortcut();
+            // Command rows render only the real keybind (the first
+            // whitespace-delimited token of the raw shortcut, dropping
+            // trailing alias words) wrapped in a green `[…]` chip; an
+            // empty keybind yields no chip. Other rows keep the raw
+            // shortcut string in the muted style.
             let is_font_row = matches!(row, PaletteRow::Font { .. });
-            let shortcut_width = if !shortcut.is_empty() {
+            let command_chip = if is_command {
+                let key = row.shortcut().split_whitespace().next().unwrap_or("");
+                (!key.is_empty()).then(|| format!("[{key}]"))
+            } else {
+                None
+            };
+            let shortcut_text: &str = if is_command {
+                command_chip.as_deref().unwrap_or("")
+            } else {
+                row.shortcut()
+            };
+            let shortcut_draw_opts = if is_command {
+                &command_chip_opts
+            } else {
+                &shortcut_opts
+            };
+            let shortcut_width = if !shortcut_text.is_empty() {
                 sugarloaf
                     .overlay_text_mut()
-                    .measure(shortcut, &shortcut_opts)
+                    .measure(shortcut_text, shortcut_draw_opts)
             } else {
                 0.0
             };
@@ -627,7 +710,7 @@ impl CommandPalette {
                 .unwrap_or(0.0);
             let right_reserve = if move_hint_width > 0.0 {
                 move_hint_width + 12.0 * s
-            } else if !shortcut.is_empty() {
+            } else if !shortcut_text.is_empty() {
                 shortcut_width + 12.0 * s
             } else if is_font_row {
                 icon_w + 12.0 * s
@@ -649,6 +732,13 @@ impl CommandPalette {
             let title_opts = if is_host_header {
                 DrawOpts {
                     color: theme.u8(theme.dim),
+                    ..result_opts
+                }
+            } else if is_command {
+                // Bold `{service}: {title}` to match the sheet / splash
+                // weight; keeps the selected/dim coloring from result_opts.
+                DrawOpts {
+                    bold: true,
                     ..result_opts
                 }
             } else {
@@ -673,6 +763,9 @@ impl CommandPalette {
                 let icon_opts = DrawOpts {
                     font_size: result_font,
                     color: row_icon_color,
+                    // Command-service glyphs render bold to match the
+                    // sheet's icon weight; other row icons stay regular.
+                    bold: is_command,
                     clip_rect: Some(list_clip),
                     ..DrawOpts::default()
                 };
@@ -708,14 +801,14 @@ impl CommandPalette {
                 sugarloaf
                     .overlay_text_mut()
                     .draw(hint_x, hint_y, text, opts);
-            } else if !shortcut.is_empty() {
+            } else if !shortcut_text.is_empty() {
                 let shortcut_x = input_x + input_width - input_pad_x - shortcut_width;
                 let shortcut_y = item_y + (row_h - shortcut_font) / 2.0;
                 sugarloaf.overlay_text_mut().draw(
                     shortcut_x,
                     shortcut_y,
-                    shortcut,
-                    &shortcut_opts,
+                    shortcut_text,
+                    shortcut_draw_opts,
                 );
             }
 

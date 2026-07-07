@@ -47,7 +47,10 @@
     pub const FRAME_RADIUS: f32 = 14.0;
     pub const FRAME_STROKE: f32 = 2.25;
 
-    pub const SCROLL_ANIMATION_LENGTH: f32 = 0.30;
+    // Snappy home-list scroll: short critically-damped catch-up so wheel /
+    // trackpad / arrow scrolling tracks the gesture tightly instead of
+    // trailing behind (the old 0.30s spring read as "laggy").
+    pub const SCROLL_ANIMATION_LENGTH: f32 = 0.12;
     pub const CURSOR_ANIMATION_LENGTH: f32 = 0.12;
     pub const SCROLL_OFF_ROWS: usize = 3;
 
@@ -62,6 +65,14 @@
         pub depth: usize,
         pub agent_kind: Option<AgentKind>,
         pub runtime_status: Option<String>,
+        /// Raw `time.updated` unix-ms — buckets the entry under a date-group
+        /// header in home mode. `0` for untracked / non-session rows.
+        pub updated_ms: u64,
+        /// Whether the session is pinned to the top of the list.
+        pub pinned: bool,
+        /// True for an injected cyan date-group / "Pinned" header row (not a
+        /// selectable session). `title` holds the header label.
+        pub is_header: bool,
     }
 
     impl NeoismAgentSessionEntry {
@@ -77,7 +88,35 @@
                 depth: 0,
                 agent_kind: None,
                 runtime_status: None,
+                updated_ms: 0,
+                pinned: false,
+                is_header: false,
             }
+        }
+
+        /// A non-selectable date-group / "Pinned" header row.
+        pub fn header(label: impl Into<String>) -> Self {
+            Self {
+                id: String::new(),
+                title: label.into(),
+                time_label: String::new(),
+                depth: 0,
+                agent_kind: None,
+                runtime_status: None,
+                updated_ms: 0,
+                pinned: false,
+                is_header: true,
+            }
+        }
+
+        pub fn with_updated_ms(mut self, updated_ms: u64) -> Self {
+            self.updated_ms = updated_ms;
+            self
+        }
+
+        pub fn with_pinned(mut self, pinned: bool) -> Self {
+            self.pinned = pinned;
+            self
         }
 
         pub fn with_depth(mut self, depth: usize) -> Self {
@@ -344,8 +383,13 @@
         scroll: Scroll,
         cursor_spring: CriticallyDampedSpring,
         scroll_top: usize,
+        /// Continuous pixel scroll position for the home (sessions) list —
+        /// the target `self.scroll` animates toward. Drives pixel-precise
+        /// wheel / trackpad scrolling (no whole-row quantization dead zone);
+        /// `scroll_top` is derived as `floor(scroll_px / row_h)`. Subagent
+        /// mode uses `content_scroll_px` instead and leaves this at 0.
+        scroll_px: f32,
         selected: usize,
-        wheel_accumulator: f32,
         last_scroll_frame: Instant,
         last_cursor_frame: Instant,
         last_panel_height_rows: usize,
@@ -369,6 +413,24 @@
         /// the panel owns focus — same pattern file_tree uses so Alt+Right
         /// animates the actual block cursor into the panel.
         selected_cursor_rect: Option<[f32; 4]>,
+        /// Screen rect of the clickable "Directory" header + path, cached
+        /// every frame by the renderer (both home + chat modes). The host's
+        /// click handler hit-tests this to open the directory dropdown.
+        directory_hit_rect: Option<[f32; 4]>,
+        /// Flat, unfiltered source list of home-mode sessions (no header
+        /// rows). `sessions` is derived from this by
+        /// [`rebuild_session_display`](Self::rebuild_session_display) — sorted
+        /// pinned-first / newest-day-first, filtered by `session_query`, with
+        /// cyan date-group header rows injected.
+        all_sessions: Vec<NeoismAgentSessionEntry>,
+        /// Live search filter for the home-mode session list. Typed while the
+        /// panel owns focus; matches session titles case-insensitively.
+        session_query: String,
+        /// True when the selection cursor sits on the search row (reached by
+        /// arrow-up past the first session, or by typing). While set, the
+        /// trail cursor renders on the search field and no session row is
+        /// highlighted.
+        search_focused: bool,
         sessions: Vec<NeoismAgentSessionEntry>,
         sessions_loaded: bool,
         /// Last time we kicked off a refresh of the sessions list.
@@ -425,8 +487,8 @@
                 scroll: Scroll::new().with_animation_length(SCROLL_ANIMATION_LENGTH),
                 cursor_spring: CriticallyDampedSpring::new(),
                 scroll_top: 0,
+                scroll_px: 0.0,
                 selected: 0,
-                wheel_accumulator: 0.0,
                 last_scroll_frame: Instant::now(),
                 last_cursor_frame: Instant::now(),
                 last_panel_height_rows: 1,
@@ -435,6 +497,10 @@
                 last_row_hit_height: ROW_HEIGHT,
                 last_row_origin_y: 0.0,
                 selected_cursor_rect: None,
+                directory_hit_rect: None,
+                all_sessions: Vec::new(),
+                session_query: String::new(),
+                search_focused: false,
                 sessions: Vec::new(),
                 sessions_loaded: false,
                 last_sessions_refresh: None,
@@ -463,6 +529,9 @@
 
         pub fn set_focused(&mut self, focused: bool) {
             self.focused = focused;
+            if !focused {
+                self.search_focused = false;
+            }
         }
 
         pub fn user_hidden(&self) -> bool {
@@ -514,9 +583,9 @@
             self.mode = mode;
             self.selected = 0;
             self.scroll_top = 0;
+            self.scroll_px = 0.0;
             self.scroll.reset();
             self.cursor_spring.reset();
-            self.wheel_accumulator = 0.0;
             self.content_scroll_px = 0.0;
         }
 
@@ -825,6 +894,25 @@
             self.selected_cursor_rect = None;
         }
 
+        /// Cache the clickable "Directory" header/path rect (screen space)
+        /// so the host can hit-test it and open the directory dropdown.
+        pub fn set_directory_hit_rect(&mut self, rect: [f32; 4]) {
+            self.directory_hit_rect = Some(rect);
+        }
+
+        pub fn clear_directory_hit_rect(&mut self) {
+            self.directory_hit_rect = None;
+        }
+
+        /// Whether `(x, y)` falls on the "Directory" header/path — the
+        /// affordance that opens the working-directory dropdown.
+        pub fn directory_hit_contains(&self, x: f32, y: f32) -> bool {
+            let Some([rx, ry, rw, rh]) = self.directory_hit_rect else {
+                return false;
+            };
+            x >= rx && x <= rx + rw && y >= ry && y <= ry + rh
+        }
+
         pub fn contains_point(&self, x: f32, y: f32) -> bool {
             let Some([px, py, pw, ph]) = self.last_panel_rect else {
                 return false;
@@ -835,26 +923,121 @@
         /// Kept for the home-mode click path that always wants a session
         /// (not a subagent). Subagent click uses `selected_row()` instead.
         pub fn selected_session(&self) -> Option<&NeoismAgentSessionEntry> {
-            self.sessions.get(self.selected)
+            if self.search_focused() {
+                return None;
+            }
+            self.sessions.get(self.selected).filter(|e| !e.is_header)
         }
 
-        /// Replace the cached sessions list. Resets selection / scroll on
-        /// the *sessions* axis only when home mode is active — flipping
-        /// modes already resets these.
+        /// Replace the cached sessions list. The incoming list is a *flat*
+        /// set of session rows (no headers); the displayed `sessions` list is
+        /// derived from it — filtered by `session_query`, sorted pinned-first
+        /// / newest-day-first, with date-group header rows injected. Resets
+        /// selection / scroll on the sessions axis only when home mode is
+        /// active — flipping modes already resets these.
         pub fn set_sessions(&mut self, sessions: Vec<NeoismAgentSessionEntry>) {
             let was_home = matches!(self.mode, SidePanelMode::Sessions);
-            self.sessions = sessions;
+            self.all_sessions = sessions;
             self.sessions_loaded = true;
+            self.rebuild_session_display();
             if was_home {
+                self.scroll_px = 0.0;
+                self.scroll.reset();
+                self.cursor_spring.reset();
+            }
+        }
+
+        /// The live home-mode search filter.
+        pub fn session_query(&self) -> &str {
+            &self.session_query
+        }
+
+        /// Replace the home-mode search filter and rebuild the display list.
+        pub fn set_session_query(&mut self, query: String) {
+            if self.session_query == query {
+                return;
+            }
+            self.session_query = query;
+            self.rebuild_session_display();
+            self.selected = self.nearest_selectable(0).unwrap_or(0);
+            self.scroll_top = 0;
+            self.scroll_px = 0.0;
+            self.scroll.reset();
+            self.cursor_spring.reset();
+        }
+
+        /// Append typed text to the home-mode search filter. Typing moves the
+        /// cursor onto the search row.
+        pub fn push_session_query(&mut self, text: &str) {
+            self.search_focused = true;
+            let mut query = self.session_query.clone();
+            query.push_str(text);
+            self.set_session_query(query);
+        }
+
+        /// Delete the last character of the home-mode search filter.
+        pub fn backspace_session_query(&mut self) {
+            let mut query = self.session_query.clone();
+            if query.pop().is_some() {
+                self.set_session_query(query);
+            }
+        }
+
+        /// Clear the home-mode search filter.
+        pub fn clear_session_query(&mut self) {
+            if !self.session_query.is_empty() {
+                self.set_session_query(String::new());
+            }
+        }
+
+        /// Rebuild the displayed `sessions` list from `all_sessions`: filter
+        /// by `session_query`, sort pinned-first / newest-day-first, and
+        /// inject "Pinned" + date-group header rows.
+        fn rebuild_session_display(&mut self) {
+            use crate::panels::agent_pane::session_group::section_label_at;
+
+            let needle = self.session_query.trim().to_lowercase();
+            let mut visible: Vec<NeoismAgentSessionEntry> = self
+                .all_sessions
+                .iter()
+                .filter(|entry| {
+                    needle.is_empty()
+                        || entry.title.to_lowercase().contains(&needle)
+                })
+                .cloned()
+                .collect();
+            // Pinned first, then newest updated time. Stable so equal keys
+            // keep the source order.
+            visible.sort_by(|a, b| {
+                b.pinned
+                    .cmp(&a.pinned)
+                    .then(b.updated_ms.cmp(&a.updated_ms))
+            });
+
+            let mut out = Vec::with_capacity(visible.len() + 8);
+            for i in 0..visible.len() {
+                if let Some(label) = section_label_at(
+                    i,
+                    |k| visible[k].pinned,
+                    |k| visible[k].updated_ms,
+                ) {
+                    out.push(NeoismAgentSessionEntry::header(label));
+                }
+                out.push(visible[i].clone());
+            }
+            self.sessions = out;
+
+            // Selection / scroll indices only refer to the sessions list in
+            // home mode; in chat (subagent) mode they belong to `subagents`,
+            // so leave them untouched there.
+            if matches!(self.mode, SidePanelMode::Sessions) {
                 if self.selected >= self.sessions.len() {
                     self.selected = self.sessions.len().saturating_sub(1);
                 }
+                self.snap_selection_to_selectable();
                 if self.scroll_top >= self.sessions.len() {
                     self.scroll_top = self.sessions.len().saturating_sub(1);
                 }
-                self.scroll.reset();
-                self.cursor_spring.reset();
-                self.wheel_accumulator = 0.0;
             }
         }
 
@@ -925,7 +1108,6 @@
                 if ids_changed {
                     self.scroll.reset();
                     self.cursor_spring.reset();
-                    self.wheel_accumulator = 0.0;
                 }
             }
             // Drop finished sub-agents the backend re-listed (the /children
@@ -1004,6 +1186,24 @@
 
         pub fn mark_refresh_kicked(&mut self) {
             self.last_sessions_refresh = Some(Instant::now());
+        }
+
+        /// Force the next `should_refresh_sessions` to fire and drop the
+        /// currently-cached list — used when the working directory changes
+        /// so the home-mode session list re-fetches for the new directory
+        /// instead of showing the previous directory's stale sessions.
+        pub fn invalidate_sessions_refresh(&mut self) {
+            self.last_sessions_refresh = None;
+            self.sessions_loaded = false;
+            self.all_sessions.clear();
+            self.sessions.clear();
+            self.session_query.clear();
+            self.search_focused = false;
+            self.selected = 0;
+            self.scroll_top = 0;
+            self.scroll_px = 0.0;
+            self.scroll.reset();
+            self.cursor_spring.reset();
         }
 
         pub fn should_refresh_subagents(&self) -> bool {
@@ -1250,19 +1450,92 @@
             self.active_rows().len()
         }
 
+        /// Next selectable (non-header) row in `active_rows` from `from`,
+        /// scanning forward or backward. `None` when there is none in that
+        /// direction — the caller then keeps its current selection.
+        fn step_selectable(&self, from: usize, forward: bool) -> Option<usize> {
+            let rows = self.active_rows();
+            if forward {
+                ((from + 1)..rows.len()).find(|&i| !rows[i].is_header)
+            } else {
+                (0..from).rev().find(|&i| !rows[i].is_header)
+            }
+        }
+
+        /// Nearest selectable (non-header) row at or around `index`.
+        fn nearest_selectable(&self, index: usize) -> Option<usize> {
+            let rows = self.active_rows();
+            if rows.is_empty() {
+                return None;
+            }
+            let index = index.min(rows.len() - 1);
+            if !rows[index].is_header {
+                return Some(index);
+            }
+            self.step_selectable(index, true)
+                .or_else(|| self.step_selectable(index, false))
+        }
+
+        /// Move selection off a header row (used after the display list is
+        /// rebuilt so the cursor never lands on a group caption).
+        fn snap_selection_to_selectable(&mut self) {
+            if let Some(index) = self.nearest_selectable(self.selected) {
+                self.selected = index;
+            }
+        }
+
+        /// Whether the selection cursor is currently on the home-mode search
+        /// row (only meaningful in [`SidePanelMode::Sessions`]).
+        pub fn search_focused(&self) -> bool {
+            self.search_focused && matches!(self.mode, SidePanelMode::Sessions)
+        }
+
+        /// Move the selection cursor onto the search row.
+        pub fn focus_search(&mut self) {
+            self.search_focused = true;
+            self.cursor_spring.reset();
+        }
+
+        fn clear_search_focus(&mut self) {
+            self.search_focused = false;
+        }
+
         pub fn select_next(&mut self) {
             let len = self.active_len();
             if len == 0 {
                 return;
             }
-            self.move_selection_to((self.selected + 1).min(len - 1));
+            // Leaving the search row lands on the first session.
+            if self.search_focused() {
+                self.clear_search_focus();
+                if let Some(first) = self.nearest_selectable(0) {
+                    self.selected = first;
+                    self.scroll_top = 0;
+                    self.scroll_px = 0.0;
+                    self.scroll.set_target(0.0);
+                }
+                return;
+            }
+            if let Some(next) = self.step_selectable(self.selected, true) {
+                self.move_selection_to(next);
+            }
         }
 
         pub fn select_prev(&mut self) {
             if self.active_len() == 0 {
                 return;
             }
-            self.move_selection_to(self.selected.saturating_sub(1));
+            if self.search_focused() {
+                return;
+            }
+            // Arrow-up past the first session lands on the search row.
+            match self.step_selectable(self.selected, false) {
+                Some(prev) => self.move_selection_to(prev),
+                None if matches!(self.mode, SidePanelMode::Sessions) => {
+                    self.focus_search();
+                }
+                None => {}
+            }
         }
 
         pub fn set_selected(&mut self, row: usize) {
@@ -1270,7 +1543,11 @@
             if len == 0 {
                 return;
             }
-            self.move_selection_to(row.min(len - 1));
+            // A click selects a real row, so it also leaves the search field.
+            self.search_focused = false;
+            // A click may land on a header row; snap to the nearest session.
+            let row = self.nearest_selectable(row.min(len - 1)).unwrap_or(0);
+            self.move_selection_to(row);
         }
 
         fn move_selection_to(&mut self, new_selected: usize) {
@@ -1337,37 +1614,33 @@
             self.active_len().saturating_sub(visible)
         }
 
+        /// Set the committed top row and drive the pixel spring toward its
+        /// row boundary (used by arrow-key navigation / clamping — rows align
+        /// flush, so no sub-row remainder).
         fn set_scroll_top(&mut self, new_top: usize) {
-            let old = self.scroll_top;
             self.scroll_top = new_top;
-            self.push_scroll_lag(old, self.scroll_top);
+            self.scroll_px = new_top as f32 * self.row_height();
+            self.scroll.set_target(self.scroll_px);
         }
 
-        fn push_scroll_lag(&mut self, old_top: usize, new_top: usize) {
-            if old_top == new_top {
-                return;
-            }
-            let was_idle = self.scroll.current() == 0.0;
-            let rows = new_top as i32 - old_top as i32;
-            self.scroll.scroll_by(rows as f32 * self.row_height());
-            if was_idle {
-                self.last_scroll_frame = Instant::now();
-            }
+        /// Maximum continuous pixel scroll for the home list at the given
+        /// viewport height (rows), leaving the last row flush at the bottom.
+        fn max_scroll_px(&self, panel_height_rows: usize) -> f32 {
+            let row_h = self.row_height();
+            let content = self.active_len() as f32 * row_h;
+            let viewport = panel_height_rows.max(1) as f32 * row_h;
+            (content - viewport).max(0.0)
         }
 
         pub fn scroll_by(&mut self, delta: i32, panel_height_rows: usize) {
-            let old = self.scroll_top;
             let max_top = self.max_scroll_top(panel_height_rows);
-            if delta < 0 {
-                self.scroll_top = self
-                    .scroll_top
-                    .saturating_sub(delta.unsigned_abs() as usize);
+            let new_top = if delta < 0 {
+                self.scroll_top.saturating_sub(delta.unsigned_abs() as usize)
             } else {
-                self.scroll_top =
-                    self.scroll_top.saturating_add(delta as usize).min(max_top);
-            }
-            if old != self.scroll_top {
-                self.push_scroll_lag(old, self.scroll_top);
+                self.scroll_top.saturating_add(delta as usize).min(max_top)
+            };
+            if new_top != self.scroll_top {
+                self.set_scroll_top(new_top);
             }
         }
 
@@ -1388,33 +1661,36 @@
             if row_h <= 0.0 {
                 return;
             }
-            self.wheel_accumulator += delta_pixels;
-            let mut rows = 0i32;
-            while self.wheel_accumulator.abs() >= row_h {
-                let sign = self.wheel_accumulator.signum();
-                self.wheel_accumulator -= sign * row_h;
-                rows += if sign > 0.0 { -1 } else { 1 };
+            // Pixel-precise home scroll: move the continuous position by the
+            // exact gesture delta (positive = scroll toward the top) and let
+            // the short spring animate to it. No whole-row quantization, so
+            // trackpad / wheel track the finger tightly. `scroll_top` is the
+            // derived integer top row for the render window + selection math.
+            let max_px = self.max_scroll_px(panel_height_rows);
+            let next = (self.scroll_px - delta_pixels).clamp(0.0, max_px);
+            if next == self.scroll_px {
+                return;
             }
-            if rows != 0 {
-                self.scroll_by(rows, panel_height_rows);
-            }
-            let max_top = self.max_scroll_top(panel_height_rows);
-            if (self.scroll_top == 0 && self.wheel_accumulator > 0.0)
-                || (self.scroll_top == max_top && self.wheel_accumulator < 0.0)
-            {
-                self.wheel_accumulator = 0.0;
-            }
+            self.scroll_px = next;
+            self.scroll.set_target(next);
+            self.scroll_top = (next / row_h).floor() as usize;
         }
 
+        /// Advance the home-list scroll spring and return the *absolute*
+        /// animated scroll position in **rows** (0 = top). The renderer
+        /// multiplies by its own (chrome-scaled) row height and derives the
+        /// top row + sub-row offset from it, so scrolling is pixel-smooth and
+        /// scale-independent.
         pub fn tick_scroll(&mut self) -> f32 {
             if matches!(self.mode, SidePanelMode::Subagents) {
                 self.scroll.reset();
                 self.last_scroll_frame = Instant::now();
                 return 0.0;
             }
-            if self.scroll.current() == 0.0 {
+            let row_h = self.row_height().max(1.0);
+            if !self.scroll.is_animating() {
                 self.last_scroll_frame = Instant::now();
-                return 0.0;
+                return self.scroll.current().max(0.0) / row_h;
             }
             let now = Instant::now();
             let dt = now
@@ -1423,7 +1699,7 @@
                 .min(0.05);
             self.last_scroll_frame = now;
             self.scroll.tick(dt);
-            self.scroll.current()
+            self.scroll.current().max(0.0) / row_h
         }
 
         pub fn tick_cursor(&mut self) -> f32 {
@@ -1442,7 +1718,7 @@
         }
 
         pub fn is_animating(&self) -> bool {
-            self.scroll.current() != 0.0
+            self.scroll.is_animating()
                 || self.cursor_spring.position != 0.0
                 // A running sub-agent paints the rainbow loader spinner (and
                 // the blinking status dot), both of which need the host to
@@ -1473,8 +1749,17 @@
             if mouse_y < content_y || mouse_y > content_y + content_h {
                 return None;
             }
-            let local_y = mouse_y - self.last_row_origin_y - self.scroll.current();
-            let row = (local_y / row_h).floor() as isize + self.scroll_top as isize;
+            // Home mode scrolls by continuous rows: convert the spring's
+            // pixel position to rows and add the visual row under the cursor.
+            // Chat (subagent) mode keeps the row-index + lag-offset anchor.
+            let row = if matches!(self.mode, SidePanelMode::Sessions) {
+                let scroll_rows = self.scroll.current().max(0.0) / self.row_height();
+                ((mouse_y - self.last_row_origin_y) / row_h + scroll_rows).floor()
+                    as isize
+            } else {
+                let local_y = mouse_y - self.last_row_origin_y - self.scroll.current();
+                (local_y / row_h).floor() as isize + self.scroll_top as isize
+            };
             if row < 0 {
                 return None;
             }

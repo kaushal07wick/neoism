@@ -1077,6 +1077,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // adopts a Welcome-routed one — two windows on a fresh machine.
         Err(neoism_backend::config::ConfigError::PathNotFound) => {
             neoism_backend::config::create_config_file(None);
+            // First launch only: drop a zero-byte marker next to the config
+            // so the Screen auto-opens the notes sidebar (Welcome/ expanded)
+            // exactly once this session. Best-effort — a failed marker just
+            // means the first-run reveal is skipped; existing users (config
+            // already present) never reach this arm and so never get it.
+            let marker = neoism_backend::config::config_dir_path()
+                .join(".notes-welcome-pending");
+            if let Some(parent) = marker.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            let _ = std::fs::File::create(&marker);
             (neoism_backend::config::Config::default(), None)
         }
         Err(err) => (neoism_backend::config::Config::default(), Some(err)),

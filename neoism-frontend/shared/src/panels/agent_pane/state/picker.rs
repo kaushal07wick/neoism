@@ -1,10 +1,14 @@
     use web_time::Instant;
 
     use crate::animation::CriticallyDampedSpring;
+    use crate::widgets::scroll::Scroll;
 
     const PICKER_VISIBLE_ROWS: usize = 8;
     const PICKER_ROW_HEIGHT: f32 = 34.0;
-    const LIST_SCROLL_ANIMATION_LENGTH: f32 = 0.14;
+    // Snappy critically-damped catch-up matching the side-panel home-list
+    // scroll rework (`side_panel::SCROLL_ANIMATION_LENGTH`), so trackpad /
+    // wheel / held-arrow scrolling tracks the gesture tightly.
+    const LIST_SCROLL_ANIMATION_LENGTH: f32 = 0.12;
     const CURSOR_ANIMATION_LENGTH: f32 = 0.10;
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -18,6 +22,9 @@
         Session,
         Subagent,
         Skill,
+        /// Working-directory dropdown, opened from the side panel's
+        /// "Directory" header. Selecting a row re-scopes the agent's cwd.
+        Directory,
     }
 
     #[derive(Clone, Debug, PartialEq, Eq)]
@@ -32,6 +39,9 @@
         /// a colored dot in the picker to distinguish "where I am" from
         /// the keyboard-selected row.
         pub is_current: bool,
+        /// True for a pinned session — floats it into the "Pinned" section
+        /// at the top of the `/sessions` picker and draws a pin marker.
+        pub pinned: bool,
     }
 
     impl NeoismAgentPickerOption {
@@ -44,6 +54,7 @@
                 section: String::new(),
                 is_header: false,
                 is_current: false,
+                pinned: false,
             }
         }
 
@@ -62,6 +73,7 @@
                 section: title.to_string(),
                 is_header: true,
                 is_current: false,
+                pinned: false,
             }
         }
 
@@ -78,10 +90,21 @@
         pub selected: usize,
         all_options: Vec<NeoismAgentPickerOption>,
         filtered_options: Vec<NeoismAgentPickerOption>,
+        /// Top visible row index. Derived from the animated pixel scroll
+        /// position each `tick_list_scroll`, so the render window and click
+        /// hit-testing track the pixel-smooth scroll exactly.
         pub scroll_offset: usize,
         pub last_rect: Option<[f32; 4]>,
-        wheel_accumulator: f32,
-        list_scroll_spring: CriticallyDampedSpring,
+        /// Device-pixel height of the footer-hint band painted at the bottom
+        /// of the card last frame (0 when no footer). Kept so click
+        /// hit-testing can exclude the footer from the row grid.
+        footer_h_px: f32,
+        /// Committed continuous scroll position in logical px (`0` = top).
+        /// The `list_scroll` spring chases this; no whole-row quantization,
+        /// so trackpad / wheel scroll pixel-precisely. Mirrors the home-list
+        /// `scroll_px` + `Scroll` model in `state/side_panel.rs`.
+        scroll_px: f32,
+        list_scroll: Scroll,
         cursor_spring: CriticallyDampedSpring,
         last_list_scroll_frame: Instant,
         last_cursor_frame: Instant,
@@ -104,8 +127,10 @@
                 all_options: options,
                 scroll_offset: 0,
                 last_rect: None,
-                wheel_accumulator: 0.0,
-                list_scroll_spring: CriticallyDampedSpring::new(),
+                footer_h_px: 0.0,
+                scroll_px: 0.0,
+                list_scroll: Scroll::new()
+                    .with_animation_length(LIST_SCROLL_ANIMATION_LENGTH),
                 cursor_spring: CriticallyDampedSpring::new(),
                 last_list_scroll_frame: Instant::now(),
                 last_cursor_frame: Instant::now(),
@@ -154,6 +179,13 @@
             self.last_rect = Some(rect);
         }
 
+        /// Record the device-pixel height of the footer band drawn last
+        /// frame so [`activate_row_at`](Self::activate_row_at) can keep the
+        /// footer out of the clickable row grid.
+        pub fn set_footer_h(&mut self, footer_h_px: f32) {
+            self.footer_h_px = footer_h_px.max(0.0);
+        }
+
         /// Translate a click into a row index and select+return true. The
         /// caller is expected to commit the picker; we just move the cursor.
         /// Header / row ratios mirror `renderer::inline_picker` (`TITLE_H = 30`,
@@ -170,7 +202,12 @@
             const HEADER_BASE: f32 = 30.0;
             let visible_rows =
                 self.filtered_options.len().min(PICKER_VISIBLE_ROWS).max(1);
-            let total_h = rh.max(1.0);
+            // The footer band sits below the row grid; exclude it so the
+            // per-row height derivation matches the list area only.
+            if y > ry + rh - self.footer_h_px {
+                return false;
+            }
+            let total_h = (rh - self.footer_h_px).max(1.0);
             let header_ratio =
                 HEADER_BASE / (HEADER_BASE + PICKER_ROW_HEIGHT * visible_rows as f32);
             let header_h_px = total_h * header_ratio;
@@ -206,44 +243,54 @@
             if count <= PICKER_VISIBLE_ROWS || delta_pixels == 0.0 {
                 return false;
             }
-            self.wheel_accumulator += delta_pixels;
-            let mut rows = 0i32;
-            while self.wheel_accumulator.abs() >= PICKER_ROW_HEIGHT {
-                let sign = self.wheel_accumulator.signum();
-                self.wheel_accumulator -= sign * PICKER_ROW_HEIGHT;
-                rows += if sign > 0.0 { -1 } else { 1 };
+            // Pixel-precise continuous scroll: move the committed position by
+            // the exact gesture delta (positive = scroll toward the top,
+            // matching the home-list / timeline sign convention) and let the
+            // short spring animate to it. No whole-row quantization dead-zone,
+            // so trackpad + wheel track the finger tightly.
+            let max_px = self.max_scroll_px();
+            let next = (self.scroll_px - delta_pixels).clamp(0.0, max_px);
+            if next != self.scroll_px {
+                self.set_scroll_px(next);
+                self.clamp_selected_to_viewport();
             }
-            if rows == 0 {
-                return true;
-            }
-            let max_offset = count.saturating_sub(PICKER_VISIBLE_ROWS);
-            let next = if rows < 0 {
-                self.scroll_offset
-                    .saturating_sub(rows.unsigned_abs() as usize)
-            } else {
-                self.scroll_offset
-                    .saturating_add(rows as usize)
-                    .min(max_offset)
-            };
-            self.set_scroll_offset(next);
-            self.clamp_selected_to_viewport();
+            // Consume the gesture whenever the list can scroll, even at a
+            // bound, so it doesn't bubble past the picker overlay.
             true
         }
 
+        /// Advance the list-scroll spring and return the sub-row residual (in
+        /// logical px, `-PICKER_ROW_HEIGHT..=0`) the renderer adds to each
+        /// row's Y so the list scrolls pixel-smoothly. Also refreshes
+        /// `scroll_offset` to the animated top row so the render window and
+        /// click hit-testing track the animated position.
         pub fn tick_list_scroll(&mut self) -> f32 {
-            if self.list_scroll_spring.position == 0.0 {
-                self.last_list_scroll_frame = Instant::now();
-                return 0.0;
+            // A shrinking option list (re-filter / replace) can leave the
+            // committed position past the new bound — pull it back in.
+            let max_px = self.max_scroll_px();
+            if self.scroll_px > max_px {
+                self.scroll_px = max_px;
+                self.list_scroll.set_target(max_px);
             }
-            let now = Instant::now();
-            let dt = now
-                .saturating_duration_since(self.last_list_scroll_frame)
-                .as_secs_f32()
-                .min(0.05);
-            self.last_list_scroll_frame = now;
-            self.list_scroll_spring
-                .update(dt, LIST_SCROLL_ANIMATION_LENGTH);
-            self.list_scroll_spring.position
+            let anim = if self.list_scroll.is_animating() {
+                let now = Instant::now();
+                let dt = now
+                    .saturating_duration_since(self.last_list_scroll_frame)
+                    .as_secs_f32()
+                    .min(0.05);
+                self.last_list_scroll_frame = now;
+                self.list_scroll.tick(dt);
+                self.list_scroll.current().max(0.0)
+            } else {
+                self.last_list_scroll_frame = Instant::now();
+                self.list_scroll.current().max(0.0)
+            };
+            let render_top = (anim / PICKER_ROW_HEIGHT).floor().max(0.0);
+            self.scroll_offset = render_top as usize;
+            // `-frac`: the renderer positions row `ix` at
+            // `list_y + (ix - scroll_offset) * row_h + residual * s`, which
+            // reduces to `list_y + ix * row_h - anim * s`.
+            render_top * PICKER_ROW_HEIGHT - anim
         }
 
         pub fn tick_cursor(&mut self) -> f32 {
@@ -262,23 +309,28 @@
         }
 
         pub fn is_animating(&self) -> bool {
-            self.list_scroll_spring.position != 0.0 || self.cursor_spring.position != 0.0
+            self.list_scroll.is_animating() || self.cursor_spring.position != 0.0
         }
 
-        fn set_scroll_offset(&mut self, next: usize) {
-            let max_offset = self
-                .filtered_options
-                .len()
-                .saturating_sub(PICKER_VISIBLE_ROWS);
-            let next = next.min(max_offset);
-            if next == self.scroll_offset {
+        /// Largest committed pixel scroll that still leaves the last row flush
+        /// at the bottom of the visible window.
+        fn max_scroll_px(&self) -> f32 {
+            let count = self.filtered_options.len();
+            let visible = count.min(PICKER_VISIBLE_ROWS);
+            count.saturating_sub(visible) as f32 * PICKER_ROW_HEIGHT
+        }
+
+        /// Move the committed continuous scroll position and drive the spring
+        /// toward it. `scroll_offset` (the integer top row) is refreshed from
+        /// the *animated* position in `tick_list_scroll`.
+        fn set_scroll_px(&mut self, next: f32) {
+            let next = next.clamp(0.0, self.max_scroll_px());
+            if (next - self.scroll_px).abs() < f32::EPSILON {
                 return;
             }
-            let old = self.scroll_offset;
-            self.scroll_offset = next;
-            let was_idle = self.list_scroll_spring.position == 0.0;
-            let rows = next as i32 - old as i32;
-            self.list_scroll_spring.position += rows as f32 * PICKER_ROW_HEIGHT;
+            let was_idle = !self.list_scroll.is_animating();
+            self.scroll_px = next;
+            self.list_scroll.set_target(next);
             if was_idle {
                 self.last_list_scroll_frame = Instant::now();
             }
@@ -287,14 +339,22 @@
         fn clamp_scroll(&mut self) {
             let count = self.filtered_options.len();
             if count == 0 {
-                self.set_scroll_offset(0);
+                self.set_scroll_px(0.0);
                 return;
             }
-            let visible = count.min(PICKER_VISIBLE_ROWS).max(1);
-            if self.selected < self.scroll_offset {
-                self.set_scroll_offset(self.selected);
-            } else if self.selected >= self.scroll_offset + visible {
-                self.set_scroll_offset(self.selected + 1 - visible);
+            let visible = count.min(PICKER_VISIBLE_ROWS).max(1) as f32;
+            // Keep the selected row inside the visible window, springing the
+            // list flush to whichever edge the selection ran past. Held-arrow
+            // navigation nudges the position one row at a time, so the list
+            // follows the cursor smoothly.
+            let sel_top = self.selected as f32 * PICKER_ROW_HEIGHT;
+            let sel_bottom = sel_top + PICKER_ROW_HEIGHT;
+            let view_top = self.scroll_px;
+            let view_bottom = view_top + visible * PICKER_ROW_HEIGHT;
+            if sel_top < view_top {
+                self.set_scroll_px(sel_top);
+            } else if sel_bottom > view_bottom {
+                self.set_scroll_px(sel_bottom - visible * PICKER_ROW_HEIGHT);
             }
         }
 
@@ -305,8 +365,12 @@
                 return;
             }
             let visible = count.min(PICKER_VISIBLE_ROWS).max(1);
-            let first = self.scroll_offset.min(count - 1);
-            let last = (self.scroll_offset + visible - 1).min(count - 1);
+            // Window derived from the committed continuous position so a
+            // wheel/trackpad scroll keeps the keyboard selection on a visible
+            // row (Enter always commits something in view).
+            let first =
+                ((self.scroll_px / PICKER_ROW_HEIGHT).round() as usize).min(count - 1);
+            let last = (first + visible - 1).min(count - 1);
             let old = self.selected;
             self.selected = selectable_index_between(
                 &self.filtered_options,
@@ -344,8 +408,8 @@
             self.selected =
                 selectable_index_near(&self.filtered_options, self.selected).unwrap_or(0);
             self.scroll_offset = 0;
-            self.wheel_accumulator = 0.0;
-            self.list_scroll_spring.reset();
+            self.scroll_px = 0.0;
+            self.list_scroll.reset();
             self.cursor_spring.reset();
         }
 
@@ -452,9 +516,13 @@
             self.selected =
                 new_selected.min(self.filtered_options.len().saturating_sub(1));
             self.scroll_offset = 0;
-            self.wheel_accumulator = 0.0;
+            self.scroll_px = 0.0;
+            // Content changed under the list — jump the scroll back to the top
+            // (no smooth animation for a fresh filter). The cursor trail only
+            // resets when the selection actually moved, so typing another
+            // letter that keeps the selection doesn't snap the highlight back.
+            self.list_scroll.reset();
             if selection_changed {
-                self.list_scroll_spring.reset();
                 self.cursor_spring.reset();
             }
         }

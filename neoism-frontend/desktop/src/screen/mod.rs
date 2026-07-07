@@ -625,6 +625,13 @@ pub struct Screen<'screen> {
     pub search_state: SearchState,
     pub hint_state: HintState,
     pub renderer: Renderer,
+    /// One-shot guard for the first-run welcome reveal. `Screen::new`
+    /// returns an inline `Ok(Screen { .. })` so there is no `self` to call
+    /// a startup method on; instead we flip this on the first `render`
+    /// tick (panes/workspace fully wired by then) to auto-open the notes
+    /// sidebar with `Welcome/` expanded, gated further by the on-disk
+    /// first-run marker. See [`Self::reveal_welcome_notes_first_run`].
+    welcome_reveal_pending: bool,
     pending_notebook_executions: Vec<
         std::sync::mpsc::Receiver<(
             std::path::PathBuf,
@@ -1617,6 +1624,7 @@ impl Screen<'_> {
             mouse: Mouse::new(config.scroll.multiplier, config.scroll.divider),
             touchpurpose: TouchPurpose::default(),
             renderer,
+            welcome_reveal_pending: true,
             pending_notebook_executions: Vec::new(),
             pending_python_kernel_retry: None,
             notebook_runtime: crate::notebook_runtime::NotebookRuntimeManager::new(),

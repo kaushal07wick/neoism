@@ -55,6 +55,12 @@ pub struct FileTree {
     /// turns them into "open file" intents: native sends `:edit
     /// <path>` to nvim; web adds a buffer tab + fetches contents.
     pub(super) pending_opens: Vec<PathBuf>,
+    /// Pending vim-style numeric count (`5` then `j` moves 5 rows).
+    /// Accumulated by [`FileTree::push_count_digit`], consumed by the
+    /// next motion via [`FileTree::take_count`].
+    pub(super) pending_count: Option<usize>,
+    /// True after a lone `g`, so the next `g` completes `gg` (go-to-top).
+    pub(super) pending_g: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -105,6 +111,8 @@ impl FileTree {
             label_truncation_cache: HashMap::new(),
             label_truncation_cache_items: 0,
             pending_opens: Vec::new(),
+            pending_count: None,
+            pending_g: false,
         }
     }
 
@@ -135,6 +143,8 @@ impl FileTree {
             label_truncation_cache: HashMap::new(),
             label_truncation_cache_items: 0,
             pending_opens: Vec::new(),
+            pending_count: None,
+            pending_g: false,
         }
     }
 

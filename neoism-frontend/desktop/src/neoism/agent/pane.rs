@@ -22,10 +22,11 @@ use neoism_ui::panels::agent_pane::usage_policy::{self, UsageSnapshot};
 use serde_json::{json, Value};
 
 use super::api::{
-    api_request_json, fetch_agent_options, fetch_config_defaults,
-    fetch_model_context_limit, fetch_model_options, fetch_session_goal,
-    fetch_session_options, fetch_session_statuses, fetch_skill_options,
-    fetch_subagent_entries, fetch_subagent_options, neoism_agent_server,
+    api_request_json, delete_session, fetch_agent_options, fetch_config_defaults,
+    fetch_model_context_limit, fetch_model_options, fetch_session_entries,
+    fetch_session_goal, fetch_session_options, fetch_session_statuses,
+    fetch_skill_options, fetch_subagent_entries, fetch_subagent_options,
+    neoism_agent_server, rename_session, set_session_pinned,
 };
 use super::commands::slash_options;
 use super::picker::{NeoismAgentPicker, NeoismAgentPickerKind, NeoismAgentPickerOption};
@@ -449,6 +450,10 @@ pub struct NeoismAgentPane {
     pub(super) directory: Option<String>,
     pub(super) server: String,
     pub(super) picker: Option<NeoismAgentPicker>,
+    /// Active inline rename of a `/sessions` picker row: `(session_id,
+    /// buffer)`. `Some` diverts typed keys into the buffer until the user
+    /// commits (Enter) or cancels (Esc).
+    pub(super) session_rename: Option<(String, String)>,
     recent_model_options: Vec<NeoismAgentPickerOption>,
     skill_options: Vec<NeoismAgentPickerOption>,
     skill_options_directory: Option<Option<String>>,
@@ -644,6 +649,7 @@ impl Default for NeoismAgentPane {
             directory: None,
             server: neoism_agent_server(),
             picker: None,
+            session_rename: None,
             recent_model_options: Vec::new(),
             skill_options: Vec::new(),
             skill_options_directory: None,

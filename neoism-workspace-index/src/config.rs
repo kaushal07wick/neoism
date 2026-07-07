@@ -10,6 +10,7 @@ pub const CURRENT_WORKSPACE_CONFIG_VERSION: u32 = 5;
 pub const DEFAULT_NOTES_WORKSPACE: &str = "Default";
 pub const DEFAULT_NOTES_VAULTS_DIR: &str = "Neoism/Vaults";
 pub const DEFAULT_NOTES_INDEX: &str = "Getting Started.md";
+pub const WELCOME_DIR: &str = "Welcome";
 pub const PROJECT_METADATA_FILE: &str = "project.toml";
 
 #[derive(Debug, Clone)]
@@ -170,7 +171,7 @@ pub fn init_workspace(root: impl AsRef<Path>) -> std::io::Result<NeoismWorkspace
         if let Some(workspace) = load_workspace(&root)? {
             write_workspace_config(&workspace)?;
             ensure_note_root_dirs(&workspace)?;
-            ensure_default_note_pages(&workspace)?;
+            ensure_welcome_docs(&workspace)?;
             return Ok(workspace);
         }
     }
@@ -179,7 +180,7 @@ pub fn init_workspace(root: impl AsRef<Path>) -> std::io::Result<NeoismWorkspace
     let workspace = NeoismWorkspace { root, config };
     write_workspace_config(&workspace)?;
     ensure_note_root_dirs(&workspace)?;
-    ensure_default_note_pages(&workspace)?;
+    ensure_welcome_docs(&workspace)?;
     Ok(workspace)
 }
 
@@ -244,7 +245,9 @@ pub fn save_workspace(workspace: &NeoismWorkspace) -> std::io::Result<()> {
 }
 
 pub fn ensure_notes_workspace(workspace: &NeoismWorkspace) -> std::io::Result<()> {
-    ensure_note_root_dirs(workspace)
+    ensure_note_root_dirs(workspace)?;
+    ensure_welcome_docs(workspace)?;
+    Ok(())
 }
 
 pub fn link_workspace_to_vault_project(
@@ -373,15 +376,61 @@ fn ensure_note_root_dirs(workspace: &NeoismWorkspace) -> std::io::Result<()> {
     Ok(())
 }
 
-fn ensure_default_note_pages(workspace: &NeoismWorkspace) -> std::io::Result<()> {
+/// Bundled Zed-style "Welcome" getting-started docs, seeded into the DEFAULT
+/// vault so users have a built-in guide (the start-screen "Notes" button and
+/// Alt+N open onto this folder). Pages are real Markdown files under
+/// `src/welcome/`.
+const WELCOME_PAGES: &[(&str, &str)] = &[
+    ("Getting Started.md", include_str!("welcome/Getting Started.md")),
+    ("The Terminal.md", include_str!("welcome/The Terminal.md")),
+    ("The Neoism Agent.md", include_str!("welcome/The Neoism Agent.md")),
+    (
+        "Notes and Drawings.md",
+        include_str!("welcome/Notes and Drawings.md"),
+    ),
+    ("Multiplayer.md", include_str!("welcome/Multiplayer.md")),
+    ("Keybindings.md", include_str!("welcome/Keybindings.md")),
+    (
+        "Editor/The Editor.md",
+        include_str!("welcome/Editor/The Editor.md"),
+    ),
+    ("Editor/Neovim.md", include_str!("welcome/Editor/Neovim.md")),
+    (
+        "Editor/Languages and LSP.md",
+        include_str!("welcome/Editor/Languages and LSP.md"),
+    ),
+    (
+        "Configuration/Configuration.md",
+        include_str!("welcome/Configuration/Configuration.md"),
+    ),
+    (
+        "Configuration/Themes, Cursor and Fonts.md",
+        include_str!("welcome/Configuration/Themes, Cursor and Fonts.md"),
+    ),
+    (
+        "Configuration/Shaders.md",
+        include_str!("welcome/Configuration/Shaders.md"),
+    ),
+];
+
+/// Seed the `Welcome/` getting-started folder into the vault. Each page is
+/// written only if missing, so user edits and deletions are preserved.
+fn ensure_welcome_docs(workspace: &NeoismWorkspace) -> std::io::Result<()> {
     if !workspace.config.notes.enabled {
         return Ok(());
     }
-    let vault = workspace.notes_workspace_dir();
-    fs::create_dir_all(&vault)?;
-    let index = vault.join(DEFAULT_NOTES_INDEX);
-    if !index.exists() {
-        fs::write(index, default_getting_started_note())?;
+    // The bundled getting-started docs always live in the DEFAULT vault,
+    // not per-project/linked vaults, so there is one canonical home for
+    // them regardless of which workspace is open.
+    let welcome = notes_workspace_dir(DEFAULT_NOTES_WORKSPACE).join(WELCOME_DIR);
+    for (name, body) in WELCOME_PAGES {
+        let page = welcome.join(name);
+        if let Some(parent) = page.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        if !page.exists() {
+            fs::write(page, body)?;
+        }
     }
     Ok(())
 }
@@ -428,104 +477,6 @@ pub fn global_cache_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(".neoism-cache"))
 }
 
-fn default_getting_started_note() -> &'static str {
-    r#"# Getting Started
-
-Welcome to your Neoism vault. A vault is just a folder of Markdown files, so your notes stay readable in any editor and easy to sync with Git, iCloud, Dropbox, or Syncthing.
-
-## Markdown Basics
-
-Use headings to structure a note:
-
-```markdown
-# Big Heading
-## Section
-### Smaller Section
-```
-
-Write paragraphs as normal text. Add emphasis with `**bold**`, `*italic*`, and `~~strikethrough~~`.
-
-## Lists
-
-Bullets are good for loose ideas:
-
-- Capture quick thoughts
-- Group related notes
-- Keep each item short
-
-Numbered lists are good for steps:
-
-1. Create a note
-2. Link it to another note
-3. Review it later
-
-## Tasks
-
-Use task checkboxes when something needs action:
-
-- [ ] Create a project note
-- [ ] Link a code workspace
-- [x] Open this vault
-
-Neoism can index tasks so they can show up in task views later.
-
-## Links
-
-Use wiki links to connect notes:
-
-- Link to another note with `[[Ideas]]`
-- Link to a heading with `[[Getting Started#Tasks]]`
-- Give a link a label with `[[Ideas|my idea list]]`
-
-Use regular Markdown links for web pages:
-
-[Neoism on GitHub](https://github.com/)
-
-## Tags
-
-Tags help group notes across folders:
-
-```markdown
-#neoism
-#notes/markdown
-#project/active
-```
-
-## Code Blocks
-
-Use fenced code blocks for commands and snippets:
-
-```bash
-cargo check
-```
-
-```rust
-fn main() {
-    println!("Markdown keeps notes portable.");
-}
-```
-
-## Tables
-
-Tables are useful for small comparisons:
-
-| Thing | Meaning |
-| --- | --- |
-| Vault | A folder of notes |
-| Project | Notes scoped to a code/work folder |
-| Workspace | A linked code directory |
-
-## Quotes
-
-Use quotes for references or callouts:
-
-> Good notes should still make sense when opened as plain text.
-
-## Projects
-
-Link a code project to this vault to make this vault the notes home for that project.
-"#
-}
 
 fn path_components(path: &Path) -> String {
     path.components()

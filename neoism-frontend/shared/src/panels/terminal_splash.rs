@@ -33,7 +33,7 @@ pub const WORDMARK_RESERVE_ROWS: usize = 9;
 /// DESIRED gap rows between wordmark and menu.
 pub const WORDMARK_TO_MENU_GAP_ROWS: usize = 2;
 /// DESIRED menu rows.
-pub const MENU_RESERVE_ROWS: usize = 13;
+pub const MENU_RESERVE_ROWS: usize = 16;
 
 /// Absolute floor for each band — what we'll shrink to on a
 /// tiny hyprland tile rather than refuse to render. Frame rows

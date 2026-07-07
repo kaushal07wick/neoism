@@ -22,6 +22,7 @@
 use super::helpers::*;
 use super::types::*;
 
+mod incsearch;
 mod model;
 mod motions;
 mod pane;

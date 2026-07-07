@@ -393,6 +393,13 @@ impl Screen<'_> {
 
         if alt_only && Self::is_arrow_up_key(key) {
             if key.state == ElementState::Pressed {
+                // Git diff panel focused: Alt+Up walks its sections
+                // (Commit → Files → Branch) rather than the tab strips.
+                if self.renderer.git_diff_panel.is_focused() {
+                    self.renderer.git_diff_panel.section_focus_prev();
+                    self.mark_dirty();
+                    return true;
+                }
                 // Already parked on the Island strip — it's the topmost
                 // level, so there's nowhere higher to go. Consume the
                 // key so it doesn't fall through to other handlers.
@@ -472,6 +479,13 @@ impl Screen<'_> {
 
         if alt_only && Self::is_arrow_down_key(key) {
             if key.state == ElementState::Pressed {
+                // Git diff panel focused: Alt+Down walks its sections
+                // (Branch → Files → Commit) rather than the tab strips.
+                if self.renderer.git_diff_panel.is_focused() {
+                    self.renderer.git_diff_panel.section_focus_next();
+                    self.mark_dirty();
+                    return true;
+                }
                 // Notes sidebar focused: Alt+Down parks the caret on the
                 // vault selector (this branch used to swallow the key
                 // before the sidebar's own handler could see it).
@@ -669,13 +683,27 @@ impl Screen<'_> {
         // out of the panel returns to the editor; Alt+Right from the
         // editor or its split stack lands on the panel when it's open.
         if self.renderer.git_diff_panel.is_focused() {
-            if !right {
-                self.renderer.git_diff_panel.set_focused(false);
-                self.focus_main_workspace();
+            if right {
+                // Alt+Right first steps onto the file-row checkbox column
+                // (Files section); only when already at the rightmost
+                // target does the chain continue outward (nowhere further
+                // — the panel hugs the window's right edge).
+                if self.renderer.git_diff_panel.section_move_right() {
+                    self.mark_dirty();
+                    return true;
+                }
+                return false;
+            }
+            // Alt+Left steps back off the checkbox column first, then
+            // leaves the panel for the editor once at the left edge.
+            if self.renderer.git_diff_panel.section_move_left() {
                 self.mark_dirty();
                 return true;
             }
-            return false;
+            self.renderer.git_diff_panel.set_focused(false);
+            self.focus_main_workspace();
+            self.mark_dirty();
+            return true;
         }
 
         // Per-pane agent side panel slot. Sits between the agent body
@@ -694,6 +722,14 @@ impl Screen<'_> {
             } else if right
                 && agent.side_panel().last_panel_rect().is_some()
                 && agent.side_panel().focusable()
+                // Only grab into the side panel when focus is already on the
+                // agent body — otherwise Alt+Right from the file tree would
+                // teleport past the agent input/composer straight into the
+                // panel. From the tree, this arm is skipped so the chain
+                // falls through to the file_tree block → focus_main_workspace
+                // (the agent composer), and the *next* Alt+Right enters here.
+                && !self.renderer.file_tree.is_focused()
+                && !self.renderer.notes_sidebar.is_focused()
             {
                 agent.side_panel_mut().set_focused(true);
                 self.renderer.file_tree.set_focused(false);

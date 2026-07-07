@@ -504,7 +504,20 @@ impl Route<'_> {
             && key_event.state == ElementState::Pressed
         {
             if let Key::Named(NamedKey::Escape) = &key_event.logical_key {
-                self.window.screen.close_git_diff_panel();
+                // Esc while the branch dropdown is open closes JUST the
+                // dropdown — the panel stays open. Only a second Esc (menu
+                // already closed) dismisses the whole panel.
+                if self
+                    .window
+                    .screen
+                    .renderer
+                    .git_diff_panel
+                    .branch_menu_is_open()
+                {
+                    self.window.screen.renderer.git_diff_panel.close_branch_menu();
+                } else {
+                    self.window.screen.close_git_diff_panel();
+                }
                 self.request_overlay_redraw();
                 return true;
             }

@@ -118,11 +118,16 @@ const BREATH_HALO_MAX: f32 = 0.18;
 const ORDER: u8 = 7;
 const DEPTH: f32 = 0.0;
 
-const MENU: [MenuSpec; 4] = [
+const MENU: [MenuSpec; 5] = [
     MenuSpec {
         icon: "\u{f07b}",
         label: "Open file tree",
         keybind: "Alt + E",
+    },
+    MenuSpec {
+        icon: "\u{f15c}",
+        label: "Notes",
+        keybind: "Alt + N",
     },
     MenuSpec {
         icon: "\u{f135}",
@@ -174,7 +179,7 @@ pub struct SplashOverlay {
     /// Per-menu-button rects cached on the last render — used by
     /// the input layer to translate clicks into shortcut
     /// actions.
-    menu_rects: [Option<[f32; 4]>; 4],
+    menu_rects: [Option<[f32; 4]>; 5],
     /// `Some(t)` for the duration of the dismiss animation
     /// (when the user runs their first command and the splash
     /// fades + scales + drifts up out of view). `None` while the
@@ -274,7 +279,7 @@ impl SplashOverlay {
     pub fn reset(&mut self) {
         self.click = None;
         self.wordmark_rect = None;
-        self.menu_rects = [None; 4];
+        self.menu_rects = [None; 5];
         self.dismiss_started = None;
         // Keep image cache + start time so re-showing the splash
         // doesn't reset the breathing phase.
@@ -346,7 +351,7 @@ impl SplashOverlay {
             // Animation done — paint nothing this frame, the
             // renderer will stop calling us next.
             self.wordmark_rect = None;
-            self.menu_rects = [None; 4];
+            self.menu_rects = [None; 5];
             return;
         }
         // Ease-in cubic on the dismiss timeline so it eases out

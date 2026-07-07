@@ -56,6 +56,44 @@ impl CommandService {
             CommandService::Workspace => "workspace",
         }
     }
+
+    /// Resolve a [`CommandService`] back from its lowercase [`prefix`]
+    /// string. The palette carries only the prefix on each `Command` row
+    /// (see [`super::modes::PaletteRow::Command`]), so the row renderer
+    /// uses this to recover the service and draw its canonical [`icon`].
+    ///
+    /// [`prefix`]: CommandService::prefix
+    /// [`icon`]: CommandService::icon
+    pub(crate) fn from_prefix(prefix: &str) -> Option<CommandService> {
+        match prefix {
+            "neoism" => Some(CommandService::Neoism),
+            "nvim" => Some(CommandService::Nvim),
+            "markdown" => Some(CommandService::Markdown),
+            "notebook" => Some(CommandService::Notebook),
+            "draw" => Some(CommandService::Draw),
+            "neoism-agent" => Some(CommandService::Agent),
+            "lsp" => Some(CommandService::Lsp),
+            "workspace" => Some(CommandService::Workspace),
+            _ => None,
+        }
+    }
+
+    /// Nerd-font glyph shown beside commands of this service — the single
+    /// canonical icon source shared by the splash menu, the Alt+K command
+    /// sheet, and the Alt+P command palette so the three never drift.
+    /// Markdown uses the note glyph so it matches the splash "Notes" entry.
+    pub(crate) const fn icon(self) -> &'static str {
+        match self {
+            CommandService::Neoism => "\u{f0c9}",
+            CommandService::Nvim => "\u{f121}",
+            CommandService::Markdown => "\u{f15c}",
+            CommandService::Notebook => "\u{f02d}",
+            CommandService::Draw => "\u{f303}",
+            CommandService::Agent => "\u{f135}",
+            CommandService::Lsp => "\u{f085}",
+            CommandService::Workspace => "\u{f07b}",
+        }
+    }
 }
 
 pub(crate) struct Command {
@@ -68,9 +106,15 @@ pub(crate) struct Command {
 pub(crate) const COMMANDS: &[Command] = &[
     Command {
         title: "New Tab",
-        shortcut: "Cmd+T terminal workspace",
+        shortcut: "Ctrl+Shift+T terminal tab",
         action: PaletteAction::TabCreate,
         service: CommandService::Neoism,
+    },
+    Command {
+        title: "New Workspace",
+        shortcut: "Ctrl+Shift+W top-level workspace",
+        action: PaletteAction::CreateWorkspace,
+        service: CommandService::Workspace,
     },
     Command {
         title: "Close Tab",
@@ -567,18 +611,6 @@ pub(crate) const COMMANDS: &[Command] = &[
         shortcut: "workspace cloud",
         action: PaletteAction::SendCurrentWorkspaceToCloud,
         service: CommandService::Workspace,
-    },
-    Command {
-        title: "Init Neoism Workspace",
-        shortcut: "create .neoism",
-        action: PaletteAction::InitNeoismWorkspace,
-        service: CommandService::Neoism,
-    },
-    Command {
-        title: "Reindex Neoism Notes",
-        shortcut: ".neoism notes",
-        action: PaletteAction::ReindexNeoismNotes,
-        service: CommandService::Markdown,
     },
     Command {
         title: "Create Neoism Note",

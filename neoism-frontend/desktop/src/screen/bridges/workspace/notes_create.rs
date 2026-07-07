@@ -200,6 +200,16 @@ impl Screen<'_> {
                 }
             },
         };
+        // Seed the vault (note dirs + bundled `Welcome/` getting-started
+        // docs) even when the workspace config already existed — the
+        // `Some(workspace)` branch above skips `init_workspace`, so an
+        // existing project would otherwise open onto an empty vault.
+        if let Err(err) = neo_workspace::ensure_notes_workspace(&workspace) {
+            self.renderer.notifications.push(
+                format!("Could not prepare Neoism notes: {err}"),
+                NotificationLevel::Error,
+            );
+        }
         self.renderer.notes_sidebar.set_workspace(
             notes_sidebar_workspace_name(&workspace),
             Some(workspace.notes_workspace_dir()),
@@ -214,4 +224,74 @@ impl Screen<'_> {
         self.mark_dirty();
     }
 
+    /// First-run welcome reveal. Fires at most once, gated by the
+    /// `.notes-welcome-pending` marker `main.rs` drops next to the config
+    /// on a brand-new install. Mirrors [`open_neoism_notes_sidebar`] for
+    /// the workspace resolve + vault seed, but instead of TOGGLING the
+    /// sidebar it forces it VISIBLE *without stealing focus* (the splash
+    /// stays the primary view), expands the bundled `Welcome/` folder, and
+    /// opens no note. Deletes the marker at the end so later launches are
+    /// untouched.
+    pub(crate) fn reveal_welcome_notes_first_run(&mut self) {
+        use neoism_ui::panels::notifications::NotificationLevel;
+
+        let marker = neoism_backend::config::config_dir_path()
+            .join(".notes-welcome-pending");
+        if !marker.exists() {
+            return;
+        }
+
+        let root = self
+            .active_pane_workspace_root()
+            .or_else(|| self.active_workspace_root.clone())
+            .or_else(|| std::env::current_dir().ok())
+            .unwrap_or_else(|| PathBuf::from("."));
+        let workspace = match active_notes_workspace_for_root(&root) {
+            Some(workspace) => workspace,
+            None => match neo_workspace::init_workspace(&root) {
+                Ok(workspace) => workspace,
+                Err(err) => {
+                    self.renderer.notifications.push(
+                        format!("Could not initialize Neoism notes: {err}"),
+                        NotificationLevel::Error,
+                    );
+                    // Drop the marker even on failure so we don't retry
+                    // the reveal every frame for the rest of the session.
+                    let _ = std::fs::remove_file(&marker);
+                    self.mark_dirty();
+                    return;
+                }
+            },
+        };
+        // Seed the vault (note dirs + bundled `Welcome/` getting-started
+        // docs) — same as the manual open path.
+        if let Err(err) = neo_workspace::ensure_notes_workspace(&workspace) {
+            self.renderer.notifications.push(
+                format!("Could not prepare Neoism notes: {err}"),
+                NotificationLevel::Error,
+            );
+        }
+        let vault = workspace.notes_workspace_dir();
+        self.renderer.notes_sidebar.set_workspace(
+            notes_sidebar_workspace_name(&workspace),
+            Some(vault.clone()),
+        );
+        // Force the sidebar open WITHOUT toggling and WITHOUT focusing —
+        // the splash/terminal keeps keyboard focus, the notes tree just
+        // appears alongside.
+        let was_visible = self.renderer.notes_sidebar.is_visible();
+        self.renderer.notes_sidebar.set_visible(true);
+        self.renderer.notes_sidebar.set_focused(false);
+        // Expand the bundled `Welcome/` folder; open no note, leave
+        // selection untouched.
+        self.renderer
+            .notes_sidebar
+            .reveal_dir(&vault.join(neo_workspace::config::WELCOME_DIR));
+        if !was_visible {
+            self.reapply_chrome_layout();
+        }
+        // One-time: consume the marker so no later launch re-triggers.
+        let _ = std::fs::remove_file(&marker);
+        self.mark_dirty();
+    }
 }

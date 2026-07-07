@@ -445,6 +445,12 @@ impl ChromeBridge {
                             }
                             '0' => pane.move_line_start(),
                             '$' => pane.move_line_end(),
+                            'n' => {
+                                pane.search_repeat(false);
+                            }
+                            'N' => {
+                                pane.search_repeat(true);
+                            }
                             _ => return false,
                         }
                     }

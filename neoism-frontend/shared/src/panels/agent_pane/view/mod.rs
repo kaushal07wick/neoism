@@ -62,6 +62,12 @@ pub trait AgentPaneView:
     fn tick_timeline_scroll(&mut self) -> bool;
     fn picker_options_len(&self) -> Option<usize>;
 
+    /// Whether the open picker carries the `/sessions` footer band, so the
+    /// occlusion rect can cover it. Defaults to `false`.
+    fn picker_has_session_footer(&self) -> bool {
+        false
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn log_render_perf(
         &mut self,
@@ -84,6 +90,12 @@ impl AgentPaneView for NeoismAgentPane {
 
     fn picker_options_len(&self) -> Option<usize> {
         NeoismAgentPane::picker(self).map(|picker| picker.options().len())
+    }
+
+    fn picker_has_session_footer(&self) -> bool {
+        use crate::panels::agent_pane::state::picker::NeoismAgentPickerKind;
+        NeoismAgentPane::picker(self)
+            .is_some_and(|picker| picker.kind == NeoismAgentPickerKind::Session)
     }
 }
 
@@ -200,8 +212,14 @@ pub fn render_agent_pane_with<P, D, I>(
         layout::home_input_rect(pane, main_rect, chrome_scale)
     };
     let mut local_occlusions = occlusion_rects.to_vec();
+    let picker_has_footer = pane.picker_has_session_footer();
     if let Some(picker_rect) = pane.picker_options_len().and_then(|len| {
-        crate::widgets::inline_picker::layout(len, input_rect, chrome_scale)
+        crate::widgets::inline_picker::layout(
+            len,
+            input_rect,
+            chrome_scale,
+            picker_has_footer,
+        )
     }) {
         local_occlusions.push(picker_rect);
     }

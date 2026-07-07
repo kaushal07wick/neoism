@@ -622,6 +622,11 @@ impl Screen<'_> {
                             neoism_backend::performer::nvim::vim_search_clear_preview_command(),
                         );
                     }
+                    // The preview moves nvim's cursor + scroll (incsearch
+                    // jump); its grid response lands asynchronously, so
+                    // keep the frame pump alive to repaint the editor
+                    // behind the palette once it arrives.
+                    self.mark_dirty();
                 }
             }
 

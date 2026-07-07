@@ -174,6 +174,30 @@ pub struct VimSearch {
     pub whole_word: bool,
 }
 
+/// Live state for the markdown pane's incremental `/` (or `?`) search.
+/// Mirrors nvim incsearch: as the pattern grows the view jumps to the
+/// nearest match, every occurrence lights up, and Esc restores the
+/// pre-search view. Distinct from [`VimSearch`], which is the committed
+/// pattern that `n`/`N` walk after the input closes.
+#[derive(Clone, Debug, Default)]
+pub struct MarkdownIncSearch {
+    /// Pattern typed so far (empty right after the opening `/`).
+    pub query: String,
+    /// Opened with `?` — flips the "nearest match" preference to
+    /// at/before the cursor and points a follow-up `n` backward.
+    pub reverse: bool,
+    /// Pre-search cursor + scroll, restored verbatim on cancel (Esc).
+    pub origin_line: usize,
+    pub origin_col: usize,
+    pub origin_scroll_y: f32,
+    pub origin_target_scroll_y: f32,
+    /// Every match's start position (source line, byte col), file order.
+    pub matches: Vec<(usize, usize)>,
+    /// Index into `matches` of the focused match — the cursor sits here
+    /// and it paints brighter. `usize::MAX` when nothing matches.
+    pub current: usize,
+}
+
 /// Per-pane vim state: the pending key sequence plus the sticky pieces
 /// (`;`/`,` find memory, `n`/`N` search memory, `.` repeat memory, and
 /// whether the current visual selection is linewise).
@@ -182,6 +206,9 @@ pub struct VimState {
     pub pending: VimPending,
     pub last_find: Option<(VimFindKind, char)>,
     pub search: Option<VimSearch>,
+    /// Live `/` incremental-search input (present only while the search
+    /// prompt is open); `None` in every other state.
+    pub incsearch: Option<MarkdownIncSearch>,
     pub last_edit: Option<VimAction>,
     pub visual_linewise: bool,
 }

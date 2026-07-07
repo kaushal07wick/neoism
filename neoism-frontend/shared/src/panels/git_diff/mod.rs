@@ -105,9 +105,23 @@ pub const RESIZE_HIT_HALF: f32 = 5.0;
 /// Hit-test extra width on each side of the right-edge scrollbar
 /// thumb so users don't need surgical mouse precision to grab it.
 pub const SCROLLBAR_HIT_PAD: f32 = 6.0;
+/// Commit-message input box height (pre-scale, single line).
+pub(crate) const COMMIT_INPUT_HEIGHT: f32 = 30.0;
+/// Max lines the multiline commit box grows to before it stops taller
+/// (further lines still type; the box just caps its drawn height).
+pub(crate) const COMMIT_INPUT_MAX_LINES: usize = 6;
+/// Commit / Stage All button height (pre-scale).
+pub(crate) const COMMIT_BUTTON_HEIGHT: f32 = 26.0;
+/// Font size for the commit box + buttons (pre-scale).
+pub(crate) const COMMIT_FONT_SIZE: f32 = 12.0;
+/// Checkbox side length on each file row (pre-scale).
+pub(crate) const CHECKBOX_SIZE: f32 = 14.0;
 pub(crate) const REFRESH_DEBOUNCE_MS: u128 = 600;
 pub(crate) const MAX_DIFF_BYTES: usize = 600_000;
-pub(crate) const SCROLL_ANIMATION_LENGTH: f32 = 0.30;
+/// Critically-damped spring time-to-target for wheel/trackpad/keyboard
+/// scrolling. Kept snappy (upper end of the 0.06–0.12s scroll band) so
+/// pixel deltas feel continuous, not laggy.
+pub(crate) const SCROLL_ANIMATION_LENGTH: f32 = 0.12;
 pub(crate) const PANEL_OPEN_ANIMATION_LENGTH: f32 = 0.18;
 
 // Render tier: above chrome/island (which use ORDER ≤ 8) so editor
@@ -124,6 +138,25 @@ pub(crate) const ORDER_LINE_BG: u8 = 22;
 /// this the stripe was hidden under the same-row hover quad.
 pub(crate) const ORDER_ACCENT: u8 = 23;
 pub(crate) const ORDER_SCROLL: u8 = 24;
+/// Branch dropdown sits above everything else in the panel (it overlays
+/// the files/diff cards while open).
+pub(crate) const ORDER_MENU_BG: u8 = 26;
+pub(crate) const ORDER_MENU_ROW: u8 = 27;
+pub(crate) const ORDER_MENU_TEXT: u8 = 28;
 
 pub(crate) const GLYPH_BRANCH: &str = "\u{e725}";
 pub(crate) const GLYPH_CLOSE: &str = "\u{f00d}";
+/// fa-check — drawn inside a ticked stage checkbox.
+pub(crate) const GLYPH_CHECK: &str = "\u{f00c}";
+/// Nerd-font chevrons — matched to the file_tree's tree chevrons so the
+/// branch selector + folder rows read the same as the Alt+E tree.
+pub(crate) const GLYPH_CHEVRON_DOWN: &str = "\u{f078}";
+pub(crate) const GLYPH_CHEVRON_RIGHT: &str = "\u{f054}";
+/// fa-folder / fa-folder-open — folder group nodes in the tree list.
+pub(crate) const GLYPH_FOLDER: &str = "\u{f07b}";
+pub(crate) const GLYPH_FOLDER_OPEN: &str = "\u{f07c}";
+/// Per-depth indent for the tree file list (pre-scale).
+pub(crate) const TREE_INDENT: f32 = 12.0;
+/// Max branch-dropdown rows shown before it scrolls (kept simple — the
+/// menu clamps to this and drops extra rows).
+pub(crate) const BRANCH_MENU_MAX_ROWS: usize = 8;

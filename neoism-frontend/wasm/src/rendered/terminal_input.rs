@@ -394,10 +394,13 @@ impl ChromeBridge {
                     self.chrome.show_file_tree();
                 }
                 1 => {
+                    self.chrome.toggle_notes_sidebar();
+                }
+                2 => {
                     self.queue_agent_tab_open();
                 }
-                2 => self.chrome.finder.set_enabled(true),
-                3 => self.chrome.command_palette.set_enabled(true),
+                3 => self.chrome.finder.set_enabled(true),
+                4 => self.chrome.command_palette.set_enabled(true),
                 _ => return false,
             }
             self.relayout_chrome();

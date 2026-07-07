@@ -171,6 +171,12 @@ pub(crate) fn thread_summary_from_session(session: &Value) -> Option<ThreadSumma
         .and_then(|time| time.get("updated"))
         .and_then(Value::as_u64)
         .unwrap_or(0);
+    // `pinned` rides in the flattened `extra` map on `SessionInfo`, so it
+    // surfaces as a top-level boolean on the session JSON.
+    let pinned = session
+        .get("pinned")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     Some(ThreadSummary {
         session_id,
         title,
@@ -180,6 +186,7 @@ pub(crate) fn thread_summary_from_session(session: &Value) -> Option<ThreadSumma
         updated_at,
         message_count: 0,
         busy: false,
+        pinned,
     })
 }
 

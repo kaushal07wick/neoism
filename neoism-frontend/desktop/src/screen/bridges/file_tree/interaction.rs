@@ -202,12 +202,45 @@ impl Screen<'_> {
 
         match &key.logical_key {
             Key::Character(s) => match s.as_str() {
+                // Numeric count prefix (`5j`, `12G`) — accumulate digits,
+                // consumed by the next motion. Swallowed either way so a
+                // digit can't leak to the terminal behind the tree.
+                ds if plain
+                    && !ds.is_empty()
+                    && ds.chars().all(|c| c.is_ascii_digit()) =>
+                {
+                    for c in ds.chars() {
+                        if let Some(d) = c.to_digit(10) {
+                            self.renderer.file_tree.push_count_digit(d);
+                        }
+                    }
+                    true
+                }
                 "j" => {
-                    self.renderer.file_tree.select_next();
+                    self.file_tree_move(true);
                     true
                 }
                 "k" => {
-                    self.renderer.file_tree.select_prev();
+                    self.file_tree_move(false);
+                    true
+                }
+                // `gg` jumps to the top (a lone `g` arms the pair).
+                "g" if plain => {
+                    if self.renderer.file_tree.note_g() {
+                        self.renderer.file_tree.select_first();
+                    }
+                    true
+                }
+                // `G` / `$` jump to the bottom; `<count>G` to that row.
+                "G" if plain => {
+                    match self.renderer.file_tree.pending_count() {
+                        Some(n) => self.renderer.file_tree.goto_row(n),
+                        None => self.renderer.file_tree.select_last(),
+                    }
+                    true
+                }
+                "$" if plain => {
+                    self.renderer.file_tree.select_last();
                     true
                 }
                 // Ctrl+D / Ctrl+U — half-page jumps like nvim. Without
@@ -222,34 +255,42 @@ impl Screen<'_> {
                     true
                 }
                 "e" if plain => {
+                    self.renderer.file_tree.clear_pending();
                     self.activate_file_tree_selection();
                     true
                 }
                 "m" if plain => {
+                    self.renderer.file_tree.clear_pending();
                     self.open_file_tree_actions_menu();
                     true
                 }
                 "c" if plain => {
+                    self.renderer.file_tree.clear_pending();
                     self.copy_file_tree_selection();
                     true
                 }
                 "p" if plain => {
+                    self.renderer.file_tree.clear_pending();
                     self.paste_file_tree_clipboard_to_selection();
                     true
                 }
                 "d" if plain => {
+                    self.renderer.file_tree.clear_pending();
                     self.confirm_delete_file_tree_selection();
                     true
                 }
                 "n" if plain => {
+                    self.renderer.file_tree.clear_pending();
                     self.open_file_tree_new_file_prompt_for_selection();
                     true
                 }
                 "f" if plain => {
+                    self.renderer.file_tree.clear_pending();
                     self.open_file_tree_new_folder_prompt_for_selection();
                     true
                 }
                 "r" if plain => {
+                    self.renderer.file_tree.clear_pending();
                     self.open_file_tree_rename_prompt_for_selection();
                     true
                 }
@@ -272,11 +313,11 @@ impl Screen<'_> {
                 _ => false,
             },
             Key::Named(NamedKey::ArrowDown) => {
-                self.renderer.file_tree.select_next();
+                self.file_tree_move(true);
                 true
             }
             Key::Named(NamedKey::ArrowUp) => {
-                self.renderer.file_tree.select_prev();
+                self.file_tree_move(false);
                 true
             }
             Key::Named(NamedKey::PageDown) => {
@@ -301,6 +342,7 @@ impl Screen<'_> {
                 true
             }
             Key::Named(NamedKey::Enter) => {
+                self.renderer.file_tree.clear_pending();
                 self.activate_file_tree_selection();
                 true
             }
@@ -313,6 +355,17 @@ impl Screen<'_> {
             // leaking it to the terminal pane behind it.
             _ if plain => true,
             _ => false,
+        }
+    }
+
+    /// Move the tree selection one motion (`j`/`k`/arrows), honouring a
+    /// pending vim count (`5j` steps five rows, clamped to the ends).
+    fn file_tree_move(&mut self, down: bool) {
+        let n = self.renderer.file_tree.take_count();
+        if down {
+            self.renderer.file_tree.select_next_by(n);
+        } else {
+            self.renderer.file_tree.select_prev_by(n);
         }
     }
 

@@ -158,23 +158,12 @@ impl NeoismAgentPane {
         std::thread::Builder::new()
             .name("neoism-agent-sessions".into())
             .spawn(move || {
-                let entries = match fetch_session_options(
+                let entries = fetch_session_entries(
                     &server,
                     current.as_deref(),
                     directory.as_deref(),
-                ) {
-                    Ok(options) => options
-                        .into_iter()
-                        .map(|option| {
-                            NeoismAgentSessionEntry::new(
-                                option.value,
-                                option.title,
-                                option.footer,
-                            )
-                        })
-                        .collect(),
-                    Err(_) => Vec::new(),
-                };
+                )
+                .unwrap_or_default();
                 let _ = tx.send(NeoismAgentBackgroundUpdate::SidePanelSessionsRefreshed(
                     entries,
                 ));

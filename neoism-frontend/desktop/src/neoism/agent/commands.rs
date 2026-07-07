@@ -340,6 +340,33 @@ impl NeoismAgentPane {
         }
     }
 
+    /// Re-scope the pane to a new working directory picked from the side
+    /// panel's Directory dropdown. Every server surface that keys off the
+    /// directory — session list, agents, skills, config defaults — is
+    /// re-fetched for the new cwd. The active session belongs to the
+    /// previous directory, so a fresh draft is started here; the next
+    /// prompt opens a session in the new directory via `ensure_session`.
+    pub(super) fn apply_directory(&mut self, value: String) {
+        self.close_picker();
+        let next = (!value.trim().is_empty()).then_some(value);
+        if self.directory == next {
+            return;
+        }
+        self.directory = next;
+        // Drop directory-keyed caches so agents / skills re-fetch for the
+        // new cwd instead of serving the previous directory's catalog.
+        self.invalidate_directory_caches();
+        // Start a clean draft in the new directory (the old session_id is
+        // scoped to the previous directory) and pull the new directory's
+        // config defaults (agent / model / thinking).
+        self.create_new_session();
+        self.apply_config_defaults();
+        // Force the home-mode session list to re-fetch for the new cwd.
+        self.side_panel.invalidate_sessions_refresh();
+        let label = self.directory_label();
+        self.system_message("Directory", label);
+    }
+
     pub(super) fn switch_session(&mut self, session_id: String) {
         if session_id.is_empty() {
             return;
@@ -1064,7 +1091,7 @@ impl NeoismAgentPane {
         self.note_timeline_prepend(prepended);
     }
 
-    fn create_new_session(&mut self) {
+    pub(super) fn create_new_session(&mut self) {
         self.session_id = None;
         self.parent_session_id = None;
         self.clear_pending_user_prompts();

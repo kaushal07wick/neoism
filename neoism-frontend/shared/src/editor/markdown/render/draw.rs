@@ -661,6 +661,57 @@ pub(super) fn draw_yank_flash_for_line(
     );
 }
 
+/// Paint the `/` incremental-search matches on `line_ix`: a dim yellow
+/// wash over every occurrence and a brighter one on the focused match,
+/// mirroring nvim's `Search` / `IncSearch` split. Reuses the same range
+/// highlighter as selection so wrapped lines stay pixel-aligned.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn draw_search_matches_for_line(
+    sugarloaf: &mut Sugarloaf,
+    pane: &MarkdownPane,
+    line_ix: usize,
+    line: &str,
+    text_x: f32,
+    text_y: f32,
+    marker_len: usize,
+    line_h: f32,
+    wrap_width: f32,
+    opts: &DrawOpts,
+    theme: &IdeTheme,
+    clip: [f32; 4],
+    clip_top: f32,
+    clip_bottom: f32,
+) {
+    let matches = pane.search_matches_for_line(line_ix);
+    if matches.is_empty() {
+        return;
+    }
+    for (raw_start, raw_end, is_current) in matches {
+        let color = if is_current {
+            theme.f32_alpha(theme.yellow, 0.52)
+        } else {
+            theme.f32_alpha(theme.yellow, 0.24)
+        };
+        draw_text_range_highlight(
+            sugarloaf,
+            line,
+            raw_start,
+            raw_end,
+            text_x,
+            text_y,
+            marker_len,
+            line_h,
+            wrap_width,
+            opts,
+            color,
+            clip,
+            clip_top,
+            clip_bottom,
+            ORDER_BG + 4,
+        );
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn draw_text_range_highlight(
     sugarloaf: &mut Sugarloaf,

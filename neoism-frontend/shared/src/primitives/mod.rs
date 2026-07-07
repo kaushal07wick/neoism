@@ -4,11 +4,13 @@
 //! native and web both share one source of geometry, easing curves,
 //! IDE theme data, and Sugarloaf text helpers.
 
+pub mod drop_cap;
 pub mod ease;
 pub mod geom;
 pub mod ide_theme;
 pub mod text;
 
+pub use drop_cap::maguntia_font_id;
 pub use ease::*;
 pub use geom::*;
 pub use ide_theme::{IdeTheme, IdeThemeName};

@@ -1,5 +1,5 @@
 use super::*;
-use super::sections::{render_section_header, render_text_line};
+use super::sections::{render_directory_section, render_section_header};
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_status_dot_text(
@@ -184,23 +184,12 @@ pub(crate) fn render_sessions_list(
     let clip = [cx, cy, cw, ch];
 
     let mut y = cy + 14.0 * s;
-    y = render_section_header(
+    y = render_directory_section(
         sugarloaf,
-        "Directory",
-        text_x,
-        y,
-        theme,
-        s,
-        clip,
-        occlusion_rects,
-    );
-    y = render_text_line(
-        sugarloaf,
-        &pane.directory_label(),
+        pane,
         text_x,
         y,
         text_w,
-        theme.u8(theme.fg),
         theme,
         s,
         clip,
@@ -217,6 +206,90 @@ pub(crate) fn render_sessions_list(
         clip,
         occlusion_rects,
     );
+
+    // Home-mode search input — mirrors the /sessions modal's search bar.
+    // When focused (arrow-up past the first session, or while typing) the row
+    // gets the same highlight a selected session would, plus a caret that
+    // sits right after the query text and advances as the user types.
+    let search_row_h = (FONT_SIZE + 10.0) * s;
+    let search_top = y;
+    let search_focused = pane.side_panel().search_focused();
+    let search_hl_y = (search_top - 2.0 * s).max(cy);
+    let search_hl_h = search_row_h + 2.0 * s;
+    {
+        let query = pane.side_panel().session_query().to_string();
+        if search_focused {
+            sugarloaf.quad(
+                None,
+                cx,
+                search_hl_y,
+                cw,
+                search_hl_h,
+                theme.f32_alpha(theme.surface, 0.55),
+                [inner_radius, inner_radius, inner_radius, inner_radius],
+                DEPTH,
+                ORDER_PANEL + 1,
+            );
+        }
+        let sy = search_top + 1.0 * s;
+        let text_opts = DrawOpts {
+            font_size: FONT_SIZE * s,
+            color: theme.u8(theme.fg),
+            clip_rect: Some(clip),
+            ..DrawOpts::default()
+        };
+        // Caret Y aligns with the text; X tracks the measured query width so
+        // it moves right on each keystroke and left on backspace.
+        let caret_x = if query.is_empty() {
+            let placeholder = DrawOpts {
+                color: theme.u8(theme.muted),
+                ..text_opts
+            };
+            draw_text_with_occlusion(
+                sugarloaf,
+                text_x + 8.0 * s,
+                sy,
+                "Search sessions",
+                &placeholder,
+                occlusion_rects,
+            );
+            text_x + 2.0 * s
+        } else {
+            draw_text_with_occlusion(
+                sugarloaf,
+                text_x + 2.0 * s,
+                sy,
+                &query,
+                &text_opts,
+                occlusion_rects,
+            );
+            text_x + 2.0 * s + sugarloaf.text_mut().measure(&query, &text_opts)
+        };
+        if search_focused {
+            sugarloaf.rounded_rect(
+                None,
+                caret_x + 1.0 * s,
+                sy,
+                (1.5 * s).max(1.0),
+                FONT_SIZE * s,
+                theme.f32(theme.accent),
+                DEPTH,
+                0.0,
+                ORDER_PANEL + 3,
+            );
+        }
+        sugarloaf.rect(
+            None,
+            text_x,
+            search_top + search_row_h,
+            text_w,
+            (1.0 * s).max(1.0),
+            theme.f32_alpha(theme.border, 0.6),
+            DEPTH,
+            ORDER_PANEL,
+        );
+    }
+    y += search_row_h + 6.0 * s;
 
     let list_top = y;
     let list_h = (cy + ch - list_top).max(0.0);
@@ -257,23 +330,33 @@ pub(crate) fn render_sessions_list(
             clip_rect: Some(clip),
             ..DrawOpts::default()
         };
+        let empty_label = if pane.side_panel().session_query().trim().is_empty() {
+            "no previous sessions"
+        } else {
+            "No results"
+        };
         draw_text_with_occlusion(
             sugarloaf,
             text_x,
             list_top + 12.0 * s,
-            "no previous sessions",
+            empty_label,
             &opts,
             occlusion_rects,
         );
         return;
     }
 
-    let scroll_offset = snap_to_device_px(
-        pane.side_panel_mut().tick_scroll(),
+    // Continuous pixel scroll: `tick_scroll` returns the absolute animated
+    // scroll position in rows; scale by this panel's row height and derive
+    // the top row + sub-row remainder so every row lands at
+    // `list_top + row*row_h - scroll_now_px` (pixel-smooth).
+    let scroll_now_px = snap_to_device_px(
+        pane.side_panel_mut().tick_scroll().max(0.0) * row_h,
         sugarloaf.scale_factor(),
     );
     let cursor_offset = pane.side_panel_mut().tick_cursor();
-    let scroll_top = pane.side_panel().scroll_top();
+    let render_top = (scroll_now_px / row_h).floor().max(0.0) as usize;
+    let frac = scroll_now_px - render_top as f32 * row_h;
     let selected = pane.side_panel().selected_index();
     let focused = pane.side_panel().is_focused();
     let list_bottom = list_rect[1] + list_rect[3];
@@ -282,9 +365,13 @@ pub(crate) fn render_sessions_list(
     // signal — same model as file_tree, see screen/render).
     pane.side_panel_mut().clear_selected_cursor_rect();
     let sessions_len = pane.side_panel().sessions().len();
-    if selected < sessions_len {
-        let row_ix = selected as isize - scroll_top as isize;
-        let row_y = list_rect[1] + row_ix as f32 * row_h + scroll_offset + cursor_offset;
+    if search_focused {
+        // Cursor is on the search row — the moving text caret drawn in the
+        // search block above is the cursor, so skip the session-row
+        // highlight + left-gutter block cursor entirely.
+    } else if selected < sessions_len {
+        let row_ix = selected as isize - render_top as isize;
+        let row_y = list_rect[1] + row_ix as f32 * row_h - frac + cursor_offset;
         let row_bottom = row_y + row_h;
         let visible_y = row_y.max(list_rect[1]);
         let visible_h = row_bottom.min(list_bottom) - visible_y;
@@ -320,9 +407,11 @@ pub(crate) fn render_sessions_list(
         }
     }
 
-    let overscan = ((scroll_offset.abs() / row_h).ceil() as usize).saturating_add(1);
-    let start = scroll_top.saturating_sub(overscan);
-    let end = (scroll_top + rows_visible.max(1) + overscan).min(sessions_len);
+    // `frac` is always < row_h, so a small fixed overscan covers the
+    // partially-visible top/bottom rows during animation.
+    let overscan = 2usize;
+    let start = render_top.saturating_sub(overscan);
+    let end = (render_top + rows_visible.max(1) + overscan).min(sessions_len);
 
     // Row text clips to `list_rect`, not the panel content rect, so
     // rows scrolling up off the top can't paint over the "PREVIOUS
@@ -334,9 +423,11 @@ pub(crate) fn render_sessions_list(
         clip_rect: Some(list_rect),
         ..DrawOpts::default()
     };
-    let dim_opts = DrawOpts {
-        font_size: FONT_SIZE * s * 0.88,
-        color: theme.u8(theme.muted),
+    // Cyan date-group / "Pinned" header rows, matching the /sessions modal.
+    let header_opts = DrawOpts {
+        font_size: FONT_SIZE * s * 0.92,
+        color: theme.u8(theme.cyan),
+        bold: true,
         clip_rect: Some(list_rect),
         ..DrawOpts::default()
     };
@@ -346,14 +437,15 @@ pub(crate) fn render_sessions_list(
     // row so the list stays aligned whether or not a row carries a dot.
     let dot_gutter = 16.0 * s;
     let dot_diameter = 7.0 * s;
+    let pin_d = 6.0 * s;
     let title_x = text_x + dot_gutter;
     let current_id = pane.session_id_str().map(str::to_string);
 
     let sessions = pane.side_panel().sessions().to_vec();
     for absolute_ix in start..end {
         let entry = &sessions[absolute_ix];
-        let row_ix = absolute_ix as isize - scroll_top as isize;
-        let row_y = list_rect[1] + row_ix as f32 * row_h + scroll_offset;
+        let row_ix = absolute_ix as isize - render_top as isize;
+        let row_y = list_rect[1] + row_ix as f32 * row_h - frac;
         let row_bottom = row_y + row_h;
         let visible_y = row_y.max(list_rect[1]);
         let visible_h = row_bottom.min(list_bottom) - visible_y;
@@ -362,11 +454,24 @@ pub(crate) fn render_sessions_list(
         }
 
         let text_y = row_y + (row_h - FONT_SIZE * s) / 2.0;
-        let is_current = entry.time_label == "current"
-            || current_id.as_deref() == Some(entry.id.as_str());
 
-        // Colored dot for the active session — a clear live-status signal
-        // instead of relying on the dim "current" word alone.
+        // Date-group / "Pinned" header row.
+        if entry.is_header {
+            let label = truncate_to_fit(&entry.title, text_w, sugarloaf, &header_opts);
+            draw_text_with_occlusion(
+                sugarloaf,
+                text_x,
+                text_y,
+                &label,
+                &header_opts,
+                occlusion_rects,
+            );
+            continue;
+        }
+
+        let is_current = current_id.as_deref() == Some(entry.id.as_str());
+
+        // Colored dot for the active session — a clear live-status signal.
         if is_current {
             let dot_y = row_y + (row_h - dot_diameter) / 2.0;
             draw_status_dot_text(
@@ -382,8 +487,25 @@ pub(crate) fn render_sessions_list(
             );
         }
 
-        let time_w = sugarloaf.text_mut().measure(&entry.time_label, &dim_opts);
-        let title_budget = (text_w - dot_gutter - time_w - 10.0 * s).max(0.0);
+        // Pinned marker — a small cyan dot in the row's right padding.
+        let pin_reserve = if entry.pinned { pin_d + 8.0 * s } else { 0.0 };
+        if entry.pinned {
+            let pin_x = text_x + text_w - pin_d;
+            let pin_y = row_y + (row_h - pin_d) / 2.0;
+            sugarloaf.rounded_rect(
+                None,
+                pin_x,
+                pin_y,
+                pin_d,
+                pin_d,
+                theme.f32(theme.cyan),
+                DEPTH,
+                pin_d / 2.0,
+                ORDER_PANEL + 3,
+            );
+        }
+
+        let title_budget = (text_w - dot_gutter - pin_reserve).max(0.0);
         let title_text =
             truncate_to_fit(&entry.title, title_budget, sugarloaf, &title_opts);
         draw_text_with_occlusion(
@@ -392,15 +514,6 @@ pub(crate) fn render_sessions_list(
             text_y,
             &title_text,
             &title_opts,
-            occlusion_rects,
-        );
-        let time_x = text_x + text_w - time_w;
-        draw_text_with_occlusion(
-            sugarloaf,
-            time_x,
-            text_y,
-            &entry.time_label,
-            &dim_opts,
             occlusion_rects,
         );
     }

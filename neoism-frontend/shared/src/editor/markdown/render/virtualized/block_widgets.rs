@@ -500,6 +500,22 @@ fn draw_code_block(
             clip_top,
             clip_bottom,
         );
+        draw_search_matches_for_line(
+            sugarloaf,
+            pane,
+            source_line,
+            line,
+            x,
+            line_y,
+            0,
+            line_h,
+            width,
+            &opts,
+            theme,
+            clip,
+            clip_top,
+            clip_bottom,
+        );
         for (row_ix, &(start, end)) in ranges.iter().enumerate() {
             let segment: String = chars[start..end].iter().collect();
             draw_virtualized_code_line(
@@ -1314,6 +1330,22 @@ fn draw_literal_block(
         .take(visible_lines)
     {
         draw_selection_for_line(
+            sugarloaf,
+            pane,
+            item.first_line + local_ix,
+            line,
+            x,
+            y,
+            0,
+            line_h,
+            width - 8.0,
+            &opts,
+            theme,
+            clip,
+            clip_top,
+            clip_bottom,
+        );
+        draw_search_matches_for_line(
             sugarloaf,
             pane,
             item.first_line + local_ix,
