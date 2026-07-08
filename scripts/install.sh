@@ -23,6 +23,7 @@ BINARIES=(neoism neoism-workspace-daemon neoism-agent)
 
 say()  { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
 err()  { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
+warn() { printf '\033[1;33mwarn:\033[0m %s\n' "$*" >&2; }
 
 need() { command -v "$1" >/dev/null 2>&1 || err "missing required tool: $1"; }
 need uname; need tar; need install; need mkdir
@@ -43,6 +44,12 @@ case "$arch" in
   *) err "unsupported arch: $arch";;
 esac
 asset="neoism-${goos}-${goarch}.tar.gz"
+case "$asset" in
+  neoism-linux-x86_64.tar.gz|neoism-darwin-aarch64.tar.gz) ;;
+  *)
+    err "no prebuilt release asset for ${goos}/${goarch} yet (${asset}). Clone https://github.com/${REPO} and run ./install.sh to build from source."
+    ;;
+esac
 
 # --- resolve version ------------------------------------------------------
 if [ "$VERSION" = "latest" ]; then
@@ -96,6 +103,12 @@ fi
 say "Done. Neoism ${VERSION} installed."
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
-  *) printf '\nAdd to PATH:\n  export PATH="%s:$PATH"\n' "$BIN_DIR";;
+  *)
+    warn "$BIN_DIR is not on PATH, so typing 'neoism' will not work in new shells yet"
+    printf '\nRun it now with:\n  %s/neoism\n\nAdd to PATH:\n  export PATH="%s:$PATH"\n' "$BIN_DIR" "$BIN_DIR"
+    ;;
 esac
+if ! "$BIN_DIR/neoism" --version >/dev/null 2>&1; then
+  warn "installed binary did not run successfully; if this is NixOS or another non-FHS Linux, build from source with ./install.sh"
+fi
 printf '\nRun:  neoism\nUpdate later:  neoism update   (or re-run this installer)\n'

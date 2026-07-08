@@ -96,8 +96,9 @@ impl Screen<'_> {
         use neoism_ui::panels::notifications::NotificationLevel;
 
         let root = self
-            .active_pane_workspace_root()
-            .or_else(|| self.active_workspace_root.clone())
+            .active_workspace_root
+            .clone()
+            .or_else(|| self.active_pane_workspace_root())
             .or_else(|| std::env::current_dir().ok())
             .unwrap_or_else(|| PathBuf::from("."));
         let note_dir = active_notes_workspace_for_root(&root)
@@ -182,8 +183,9 @@ impl Screen<'_> {
         use neoism_ui::panels::notifications::NotificationLevel;
 
         let root = self
-            .active_pane_workspace_root()
-            .or_else(|| self.active_workspace_root.clone())
+            .active_workspace_root
+            .clone()
+            .or_else(|| self.active_pane_workspace_root())
             .or_else(|| std::env::current_dir().ok())
             .unwrap_or_else(|| PathBuf::from("."));
         let workspace = match active_notes_workspace_for_root(&root) {
@@ -242,8 +244,9 @@ impl Screen<'_> {
         }
 
         let root = self
-            .active_pane_workspace_root()
-            .or_else(|| self.active_workspace_root.clone())
+            .active_workspace_root
+            .clone()
+            .or_else(|| self.active_pane_workspace_root())
             .or_else(|| std::env::current_dir().ok())
             .unwrap_or_else(|| PathBuf::from("."));
         let workspace = match active_notes_workspace_for_root(&root) {
