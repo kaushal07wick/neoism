@@ -495,6 +495,19 @@ impl NvimSessionHandle {
     /// (scratch / no file backing) so we never seed a CRDT replica with a
     /// bogus key. This does NOT touch the redraw path.
     pub async fn read_active_buffer(&self) -> Result<Option<BufferText>, NvimError> {
+        // The ~400ms rust-LSP buffer poll (rust_lsp.rs) drives this. Holding
+        // the outer `session` Mutex across the (non-fast, count-deferrable)
+        // buffer-read exec_lua is exactly what wedged `handle()`/SendKeys
+        // while normal mode had a pending count/operator — the digit-key
+        // freeze. Skip the read while nvim is blocked (checked off a cloned
+        // handle, no lock held), so the poll never takes the session lock
+        // into a deferred read while a count is open.
+        let nvim = self.inner.session.lock().await.nvim.clone();
+        if let Some(client) = nvim.lock().await.clone() {
+            if nvim_is_blocked(&client).await {
+                return Ok(None);
+            }
+        }
         self.inner.session.lock().await.read_active_buffer().await
     }
 
@@ -996,8 +1009,10 @@ impl NvimSession {
     /// buffer's lines joined with `\n` (matching nvim's internal model),
     /// which is exactly what the daemon CRDT replica wants to seed from.
     async fn read_active_buffer(&self) -> Result<Option<BufferText>, NvimError> {
-        let guard = self.nvim.lock().await;
-        let nvim = guard.as_ref().ok_or(NvimError::Closed)?;
+        // Clone the rpc client out so the exec_lua below never holds the
+        // `nvim` Mutex (send_keys waits on it) across a count-deferred read.
+        let nvim = self.nvim.lock().await.clone().ok_or(NvimError::Closed)?;
+        let nvim = &nvim;
         // One lua call returns `{ path, lines }`. `nvim_buf_get_lines`
         // with `false` strict_indexing on a fresh buffer yields the full
         // line range; we join with "\n" to mirror nvim's text model.
