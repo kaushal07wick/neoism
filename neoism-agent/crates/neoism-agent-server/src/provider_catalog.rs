@@ -607,6 +607,7 @@ fn codex_catalog_limit(providers: &[ProviderInfo], model_id: &str) -> Option<Mod
 fn uses_codex_subscription_limits(model_id: &str, limit: &ModelLimit) -> bool {
     model_id.starts_with("gpt-5.4")
         || model_id.starts_with("gpt-5.5")
+        || model_id.starts_with("gpt-5.6")
         || (model_id.contains("codex") && limit.context > CODEX_OPENAI_CONTEXT_LIMIT)
 }
 
@@ -865,6 +866,24 @@ mod tests {
     }
 
     #[test]
+    fn effective_provider_catalog_treats_gpt_5_6_family_as_codex_subscription_models() {
+        let providers = effective_provider_catalog(&parse_codex_limit_fixture());
+        let openai = providers
+            .iter()
+            .find(|provider| provider.id == "openai")
+            .expect("openai provider");
+
+        for model_id in ["gpt-5.6", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"] {
+            let model = openai.models.get(model_id).expect("gpt-5.6 family model");
+            assert_eq!(model.limit.context, 400_000, "{model_id}");
+            assert_eq!(model.limit.input, Some(272_000), "{model_id}");
+            assert_eq!(model.limit.output, 128_000, "{model_id}");
+            assert_eq!(model.cost.input, 0.0, "{model_id}");
+            assert_eq!(model.cost.output, 0.0, "{model_id}");
+        }
+    }
+
+    #[test]
     fn usable_provider_catalog_shows_free_opencode_and_connected_supported_models() {
         let providers = parse_models(
             r#"{
@@ -983,6 +1002,34 @@ mod tests {
                     "release_date": "2026-04-23",
                     "limit": { "context": 1050000, "input": 922000, "output": 128000 },
                     "cost": { "input": 1.25, "output": 10.0, "cache_read": 0.125, "cache_write": 1.25 }
+                  },
+                  "gpt-5.6": {
+                    "id": "gpt-5.6",
+                    "name": "GPT-5.6",
+                    "release_date": "2026-07-01",
+                    "limit": { "context": 1050000, "input": 922000, "output": 128000 },
+                    "cost": { "input": 5.0, "output": 30.0, "cache_read": 0.5, "cache_write": 6.25 }
+                  },
+                  "gpt-5.6-luna": {
+                    "id": "gpt-5.6-luna",
+                    "name": "GPT-5.6 Luna",
+                    "release_date": "2026-07-01",
+                    "limit": { "context": 1050000, "input": 922000, "output": 128000 },
+                    "cost": { "input": 1.0, "output": 6.0, "cache_read": 0.1, "cache_write": 1.25 }
+                  },
+                  "gpt-5.6-terra": {
+                    "id": "gpt-5.6-terra",
+                    "name": "GPT-5.6 Terra",
+                    "release_date": "2026-07-01",
+                    "limit": { "context": 1050000, "input": 922000, "output": 128000 },
+                    "cost": { "input": 2.5, "output": 15.0, "cache_read": 0.25, "cache_write": 3.125 }
+                  },
+                  "gpt-5.6-sol": {
+                    "id": "gpt-5.6-sol",
+                    "name": "GPT-5.6 Sol",
+                    "release_date": "2026-07-01",
+                    "limit": { "context": 1050000, "input": 922000, "output": 128000 },
+                    "cost": { "input": 5.0, "output": 30.0, "cache_read": 0.5, "cache_write": 6.25 }
                   }
                 }
               },
