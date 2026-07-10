@@ -866,11 +866,33 @@ impl Renderer {
                 self.agent_icons_registered = agent_icon::register_agent_icons(sugarloaf);
             }
 
-            // Detection costs a tcgetpgrp plus native process metadata reads
-            // per terminal, so throttle and only probe when the buffer-tab
-            // strip is visible. Scan every terminal in the active workspace
-            // so an agent started in a normal/root terminal still gives that
-            // tab its provider logo after the user switches away.
+            // Apply native-process results only to the workspace they were
+            // captured from. The worker wakes winit when a result lands, so
+            // an idle terminal does not need a polling render loop.
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
+            if let Some(result) = self
+                .agent_detection_worker
+                .as_ref()
+                .and_then(agent_icon::AgentDetectionWorker::try_result)
+            {
+                let grid = context_manager.current_grid();
+                let current_route = grid.current().route_id;
+                let workspace_token = grid.workspace_route_id().unwrap_or(current_route);
+                if result.workspace_token == workspace_token {
+                    self.last_agent = result
+                        .detected
+                        .iter()
+                        .find(|(route_id, _, _)| *route_id == current_route)
+                        .map(|(_, _, agent)| *agent);
+                    self.buffer_tabs
+                        .set_detected_terminal_agents(&result.detected);
+                }
+            }
+
+            // Only the cheap tcgetpgrp ioctl runs here. /proc reads on Linux
+            // and `ps` on macOS run on the persistent detection worker. Scan
+            // every terminal in the active workspace so an agent started in
+            // a normal/root terminal still gives that tab its provider logo.
             if self.buffer_tabs.is_visible()
                 && self.buffer_tabs.terminal_index().is_some()
             {
@@ -883,11 +905,13 @@ impl Renderer {
                     {
                         let current_route = context_manager.current().route_id;
                         let grid = context_manager.current_grid();
+                        let workspace_token =
+                            grid.workspace_route_id().unwrap_or(current_route);
                         let root_route = grid
                             .root
                             .and_then(|root| grid.contexts().get(&root))
                             .map(|item| item.context().route_id);
-                        let mut detected = Vec::new();
+                        let mut probes = Vec::new();
                         for (_, item) in grid.contexts() {
                             let ctx = item.context();
                             if ctx.editor.is_some()
@@ -897,24 +921,29 @@ impl Renderer {
                             {
                                 continue;
                             }
-                            if let Some(agent) =
-                                agent_icon::detect_agent(*ctx.main_fd, ctx.shell_pid)
+                            if let Some(process_group) =
+                                agent_icon::foreground_process_group(*ctx.main_fd)
                             {
-                                detected.push((
-                                    ctx.route_id,
-                                    Some(ctx.route_id) == root_route,
-                                    agent,
-                                ));
+                                probes.push(agent_icon::AgentProbe {
+                                    route_id: ctx.route_id,
+                                    is_root: Some(ctx.route_id) == root_route,
+                                    process_group,
+                                });
                             }
                         }
 
-                        self.last_agent = None;
-                        for (route_id, _, agent) in &detected {
-                            if *route_id == current_route {
-                                self.last_agent = Some(*agent);
-                            }
+                        if self.agent_detection_worker.is_none() {
+                            self.agent_detection_worker =
+                                agent_icon::AgentDetectionWorker::spawn();
                         }
-                        self.buffer_tabs.set_detected_terminal_agents(&detected);
+                        if let Some(worker) = &self.agent_detection_worker {
+                            worker.request(
+                                workspace_token,
+                                probes,
+                                context_manager.event_proxy(),
+                                context_manager.window_id(),
+                            );
+                        }
                     }
                     self.last_agent_check = Some(std::time::Instant::now());
                 }

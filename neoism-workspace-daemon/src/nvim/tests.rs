@@ -9,6 +9,15 @@
     }
 
     #[test]
+    fn first_resize_is_immediate_then_resize_storms_are_coalesced() {
+        assert_eq!(resize_coalesce_delay(false), None);
+        assert_eq!(
+            resize_coalesce_delay(true),
+            Some(std::time::Duration::from_millis(16))
+        );
+    }
+
+    #[test]
     fn decode_diagnostics_pulls_lnum_col_severity() {
         // Hand-build the value shape `vim.diagnostic.get` returns
         // through `exec_lua`.

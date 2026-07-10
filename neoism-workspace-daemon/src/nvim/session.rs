@@ -1,5 +1,12 @@
 use super::*;
 
+const RESIZE_COALESCE_DELAY: Duration = Duration::from_millis(16);
+
+#[inline]
+pub(crate) fn resize_coalesce_delay(has_applied_resize: bool) -> Option<Duration> {
+    has_applied_resize.then_some(RESIZE_COALESCE_DELAY)
+}
+
 /// Handle to a running nvim subprocess.
 ///
 /// The redraw receiver is intentionally hoisted out (returned alongside
@@ -168,11 +175,16 @@ impl NvimSessionRegistry {
             }),
             tokio::spawn(async move {
                 let mut last_size = (DEFAULT_WIDTH, DEFAULT_HEIGHT);
+                let mut has_applied_resize = false;
                 while resize_rx.changed().await.is_ok() {
-                    // Collapse one display frame of resize traffic. The watch
-                    // receiver retains only the last value while this timer or
-                    // an RPC is pending.
-                    tokio::time::sleep(Duration::from_millis(16)).await;
+                    // Initial geometry is launch-critical and cannot be a
+                    // resize storm, so apply the first real resize at once.
+                    // After that, collapse one display frame of traffic. The
+                    // watch receiver retains only the latest value while the
+                    // timer or RPC is pending.
+                    if let Some(delay) = resize_coalesce_delay(has_applied_resize) {
+                        tokio::time::sleep(delay).await;
+                    }
                     let (width, height, surface_id) =
                         resize_rx.borrow_and_update().clone();
                     let next = (width.max(1), height.max(1));
@@ -195,6 +207,7 @@ impl NvimSessionRegistry {
                     {
                         Ok(()) => {
                             last_size = next;
+                            has_applied_resize = true;
                             let page_rows =
                                 ((next.1 as f32) * 0.66).round().max(1.0) as u64;
                             let scroll_command = format!("set scroll={page_rows}");

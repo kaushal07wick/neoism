@@ -2,6 +2,15 @@
 // the constructor/core methods. This file is part of the impl Screen<'_> block.
 
 use super::*;
+
+#[inline]
+fn chrome_layout_repair_required<T: PartialEq>(
+    previous: Option<&T>,
+    current: &T,
+    margin_stale: bool,
+) -> bool {
+    margin_stale || previous.is_some_and(|previous| previous != current)
+}
 use neoism_ui::chrome_policy::{workspace_chrome_margins, WorkspaceChromeMetrics};
 
 impl Screen<'_> {
@@ -722,7 +731,6 @@ impl Screen<'_> {
     /// active route id.
     pub(crate) fn repair_chrome_layout_if_stale(&mut self) {
         let signature = self.chrome_layout_signature();
-        let signature_changed = self.last_chrome_layout_signature != Some(signature);
         let margins = self.workspace_chrome_margins();
         let scale = self.sugarloaf.scale_factor();
         let margin_stale = self.context_manager.all_grids().iter().any(|grid| {
@@ -740,6 +748,30 @@ impl Screen<'_> {
             (actual.top - expected_top).abs() > 0.25
                 || (actual.bottom - margins.bottom * scale).abs() > 0.25
         });
+        let repair_required = chrome_layout_repair_required(
+            self.last_chrome_layout_signature.as_ref(),
+            &signature,
+            margin_stale,
+        );
+
+        // `None` means "no invariant snapshot yet", not "the constructor
+        // geometry is stale". On the first frame the grids already carry the
+        // correct margins from construction; forcing a full reflow here used
+        // to resize every PTY/editor and made an otherwise instant launch do
+        // duplicate layout work. Seed the snapshot in-place when the measured
+        // geometry is valid. If an async terminal -> editor transition raced
+        // the first paint, `margin_stale` remains true and still takes the
+        // repair path below.
+        if !repair_required {
+            if self.last_chrome_layout_signature.is_none() {
+                self.last_chrome_layout_signature = Some(signature);
+            }
+            return;
+        }
+
+        let signature_changed = self
+            .last_chrome_layout_signature
+            .is_some_and(|previous| previous != signature);
 
         if signature_changed || margin_stale {
             tracing::debug!(
@@ -1118,5 +1150,22 @@ impl Screen<'_> {
         );
         self.renderer.modal.close();
         self.mark_dirty();
+    }
+}
+
+#[cfg(test)]
+mod launch_layout_tests {
+    use super::chrome_layout_repair_required;
+
+    #[test]
+    fn first_frame_seeds_valid_geometry_without_reflow() {
+        assert!(!chrome_layout_repair_required(None, &7_u8, false));
+        assert!(chrome_layout_repair_required(None, &7_u8, true));
+    }
+
+    #[test]
+    fn established_geometry_repairs_only_real_changes() {
+        assert!(!chrome_layout_repair_required(Some(&7_u8), &7_u8, false));
+        assert!(chrome_layout_repair_required(Some(&7_u8), &8_u8, false));
     }
 }

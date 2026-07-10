@@ -9,6 +9,8 @@
 // upload, and native foreground-process detection — none of which the
 // web build needs or could compile.
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use neoism_backend::event::{EventProxy, RioEvent, RioEventType, WindowId};
 use neoism_backend::sugarloaf::{
     ColorType, GraphicData, GraphicDataEntry, GraphicId, GraphicOverlay, Sugarloaf,
 };
@@ -120,28 +122,24 @@ pub fn clear_side_panel_icon_overlays(sugarloaf: &mut Sugarloaf) {
     sugarloaf.clear_image_overlays_for(SIDE_PANEL_ICON_PANEL_ID);
 }
 
-/// Look at the foreground process group on `main_fd` and decide whether
-/// it's one of the supported agents. Reads `/proc/<pgid>/comm` and
-/// `/proc/<pgid>/cmdline` once per call — cheap, but the caller should
-/// throttle to avoid running every frame.
-#[cfg(target_os = "linux")]
-pub fn detect_agent(
-    main_fd: std::os::unix::io::RawFd,
-    _shell_pid: u32,
-) -> Option<AgentKind> {
+/// A cheap tty ioctl used on the render thread. Native process metadata I/O
+/// happens later on [`AgentDetectionWorker`], never while painting a frame.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub fn foreground_process_group(main_fd: std::os::unix::io::RawFd) -> Option<u32> {
     use std::os::raw::c_int;
 
-    // tcgetpgrp returns the foreground process group id for the
-    // controlling tty. With multiple processes in the chain (npx → node
-    // → native binary, as with codex), the pgid is the leader's pid;
-    // we read both `comm` and `cmdline` so the agent matches whether
-    // it's run directly or via a wrapper.
     let pgid: c_int = unsafe { libc::tcgetpgrp(main_fd) };
     if pgid <= 0 {
         return None;
     }
-    let pgid = pgid as u32;
+    Some(pgid as u32)
+}
 
+/// Inspect a Linux foreground process group from the background detection
+/// worker. With wrapper chains (npx → node → native binary), the process-group
+/// leader's command line still carries the identifying package/binary name.
+#[cfg(target_os = "linux")]
+fn detect_agent_for_process_group(pgid: u32) -> Option<AgentKind> {
     let comm = std::fs::read_to_string(format!("/proc/{pgid}/comm"))
         .map(|s| s.trim().to_string())
         .unwrap_or_default();
@@ -158,17 +156,7 @@ pub fn detect_agent(
 /// `-ww` matters because the identifying package path is often near the end
 /// of the command line.
 #[cfg(target_os = "macos")]
-pub fn detect_agent(
-    main_fd: std::os::unix::io::RawFd,
-    _shell_pid: u32,
-) -> Option<AgentKind> {
-    use std::os::raw::c_int;
-
-    let pgid: c_int = unsafe { libc::tcgetpgrp(main_fd) };
-    if pgid <= 0 {
-        return None;
-    }
-
+fn detect_agent_for_process_group(pgid: u32) -> Option<AgentKind> {
     let pgid = pgid.to_string();
     let output = std::process::Command::new("/bin/ps")
         .args(["-ww", "-g", &pgid, "-o", "comm=", "-o", "args="])
@@ -181,9 +169,102 @@ pub fn detect_agent(
     detect_agent_from_process_identity("", &identity)
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
-pub fn detect_agent(_main_fd: i32, _shell_pid: u32) -> Option<AgentKind> {
-    None
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[derive(Clone, Copy, Debug)]
+pub struct AgentProbe {
+    pub route_id: usize,
+    pub is_root: bool,
+    pub process_group: u32,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+struct AgentDetectionRequest {
+    workspace_token: usize,
+    probes: Vec<AgentProbe>,
+    event_proxy: EventProxy,
+    window_id: WindowId,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub struct AgentDetectionResult {
+    pub workspace_token: usize,
+    pub detected: Vec<(usize, bool, AgentKind)>,
+}
+
+/// One long-lived native process-inspection lane. Requests are bounded and
+/// latest-wins at the caller, so a slow `ps` cannot accumulate work or block
+/// rendering. The worker explicitly wakes winit after publishing a result.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub struct AgentDetectionWorker {
+    request_tx: std::sync::mpsc::SyncSender<AgentDetectionRequest>,
+    result_rx: std::sync::mpsc::Receiver<AgentDetectionResult>,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl AgentDetectionWorker {
+    pub fn spawn() -> Option<Self> {
+        let (request_tx, request_rx) =
+            std::sync::mpsc::sync_channel::<AgentDetectionRequest>(1);
+        let (result_tx, result_rx) = std::sync::mpsc::channel::<AgentDetectionResult>();
+        std::thread::Builder::new()
+            .name("neoism-agent-detect".into())
+            .spawn(move || {
+                while let Ok(mut request) = request_rx.recv() {
+                    // If a workspace switch arrived while the prior result was
+                    // waiting to be consumed, inspect only the newest view.
+                    while let Ok(newer) = request_rx.try_recv() {
+                        request = newer;
+                    }
+                    let detected = request
+                        .probes
+                        .into_iter()
+                        .filter_map(|probe| {
+                            detect_agent_for_process_group(probe.process_group)
+                                .map(|agent| (probe.route_id, probe.is_root, agent))
+                        })
+                        .collect();
+                    if result_tx
+                        .send(AgentDetectionResult {
+                            workspace_token: request.workspace_token,
+                            detected,
+                        })
+                        .is_err()
+                    {
+                        break;
+                    }
+                    request.event_proxy.send_event(
+                        RioEventType::Rio(RioEvent::Render),
+                        request.window_id,
+                    );
+                }
+            })
+            .ok()?;
+        Some(Self {
+            request_tx,
+            result_rx,
+        })
+    }
+
+    pub fn request(
+        &self,
+        workspace_token: usize,
+        probes: Vec<AgentProbe>,
+        event_proxy: EventProxy,
+        window_id: WindowId,
+    ) -> bool {
+        self.request_tx
+            .try_send(AgentDetectionRequest {
+                workspace_token,
+                probes,
+                event_proxy,
+                window_id,
+            })
+            .is_ok()
+    }
+
+    pub fn try_result(&self) -> Option<AgentDetectionResult> {
+        self.result_rx.try_recv().ok()
+    }
 }
 
 fn detect_agent_from_process_identity(comm: &str, command: &str) -> Option<AgentKind> {

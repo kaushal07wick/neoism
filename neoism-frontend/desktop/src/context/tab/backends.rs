@@ -322,8 +322,7 @@ impl DaemonEditorBackend {
     ) {
         let (send_tx, mut recv_rx) =
             tokio_mpsc::unbounded_channel::<EditorClientMessage>();
-        let (resize_tx, mut resize_rx) =
-            tokio_watch::channel::<(u32, u32)>((0, 0));
+        let (resize_tx, mut resize_rx) = tokio_watch::channel::<(u32, u32)>((0, 0));
         let worker = async move {
             enum Outbound {
                 Message(EditorClientMessage),
@@ -346,11 +345,12 @@ impl DaemonEditorBackend {
                     changed = resize_rx.changed(), if resize_open => {
                         match changed {
                             Ok(()) => {
-                                // One frame of coalescing keeps a fast window
-                                // drag from being serialized into the socket.
-                                // Changes during this wait remain one watch
-                                // value, so only the newest dimensions leave.
-                                tokio::time::sleep(std::time::Duration::from_millis(16)).await;
+                                // The watch channel is already a latest-wins
+                                // queue while the websocket send is pending.
+                                // Do not add another frame of latency here:
+                                // the daemon is the single resize-debounce
+                                // boundary, and it lets the first resize
+                                // through immediately.
                                 let (width, height) = *resize_rx.borrow_and_update();
                                 Some(Outbound::Resize(width, height))
                             }

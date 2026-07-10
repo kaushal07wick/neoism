@@ -244,6 +244,11 @@ pub struct Renderer {
     /// renders.
     pub(super) last_agent: Option<agent_icon::AgentKind>,
     pub(super) last_agent_check: Option<std::time::Instant>,
+    /// Native process metadata inspection stays off the render thread. The
+    /// worker is created lazily on the first visible terminal-tab probe and
+    /// reused for the lifetime of this renderer.
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    pub(super) agent_detection_worker: Option<agent_icon::AgentDetectionWorker>,
     /// In-flight extension install jobs keyed by manifest id. Lives on
     /// the renderer so the per-frame pump in
     /// `bridges/extensions.rs::pump_install_progress` can drain progress
@@ -425,6 +430,8 @@ impl Renderer {
             agent_icons_registered: false,
             last_agent: None,
             last_agent_check: None,
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
+            agent_detection_worker: None,
             install_tracker: crate::screen::bridges::extensions::InstallTracker::default(
             ),
             bundled_manifests: std::collections::BTreeMap::new(),
